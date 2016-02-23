@@ -3,7 +3,7 @@
 # Name:        main.py
 # Purpose:
 #
-# Author:      claudio piccinin
+# Author:      claudio piccinini
 #
 # Created:     11/09/2015
 #-------------------------------------------------------------------------------
