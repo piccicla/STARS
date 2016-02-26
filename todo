@@ -1,0 +1,12 @@
+add code in main.py to process multiple images
+
+add rastermask and subset logic -> getPixelValues.getGeneralSinglePixelValues
+add rastermask logic and modify combinations logic -> getPixelValues.getMeanPixelValues
+
+try parallel computing for SKll
+
+
+consider the same shuffling for subset polygons
+
+
+

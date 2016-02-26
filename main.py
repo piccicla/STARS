@@ -49,7 +49,9 @@ os.chdir("D:/ITC/courseMaterial/module13GFM2/2015/code/STARS/processing")
 
 shapes = r"Mali_field_2014_smoothed_class_prj.shp"
 
-img = r"raster.tif"
+#img = r"raster.tif"
+img = r"ENVIraster.tif"
+treemask = r"Intensity_mask1.tif"
 
 # shapefile field that contains the classes
 fieldname = "CLASS"
@@ -66,7 +68,7 @@ tilesize =(1024,1024)
 
 # mean=True to get the average multiband pixel values inside polygons
 # mean=False to get all the multiband pixel values inside polygons
-MEAN = False
+MEAN = True
 
 ##########################################################
 
@@ -83,23 +85,32 @@ if MEAN:
 
 else:
 
+
     data, uniqueLabels,columnNames = getPixelValues.getSinglePixelValues(shapes, img, fieldname)
 
+    sys.exit()
     #output data to skll, we don't export the polygonID   |rowid,band1, band2,..., 1-2, 1-3,....,label|
     # the first row will contain the field names
-    #np.savetxt('dataPixelsComb.tsv', data[:,1:], fmt='%.4f', delimiter='\t', header= ''.join(columnNames[1:]), comments='')
+    np.savetxt('ENVIdataPixelsComb.tsv', data[:,1:], fmt='%.4f', delimiter='\t', header= ''.join(columnNames[1:]), comments='')
 
     # there is no header the field names  |band1, band2,..., 1-2, 1-3,....|
     #np.savetxt('dataPixelsCombX.csv', data[:,2:-1], fmt='%.4f', delimiter=',')
+    np.savetxt('ENVIdataPixelsCombX.csv', data[:,2:-1], fmt='%.4f', delimiter=',')
     # there is no header with the field names  |polyID, rowid,band1, band2,..., 1-2, 1-3,....|
     #np.savetxt('dataPixelsCombX+IDS.csv', data[:,:-1], fmt='%.4f', delimiter=',')
+    np.savetxt('ENVIdataPixelsCombX+IDS.csv', data[:,:-1], fmt='%.4f', delimiter=',')
     # there is no header with the field names  |label|
     #np.savetxt('dataPixelsCombY.csv', data[:,-1:], fmt='%.1f', delimiter=',')
+    np.savetxt('ENVIdataPixelsCombY.csv', data[:,-1:], fmt='%.1f', delimiter=',')
+
 
     # |rowid,band1, band2,,....,label|
     #np.savetxt(r'D:\ITC\courseMaterial\module13GFM2\2015\code\STARS\processing\Skll\stars\train+dev\dataPixelsCombXA.tsv', np.hstack((data[:,1:10],data[:,-1:])), fmt='%.6f', delimiter='\t',header= ''.join(columnNames[1:10]+columnNames[-1:]), comments='')
+    np.savetxt(r'D:\ITC\courseMaterial\module13GFM2\2015\code\STARS\processing\Skll\stars\train+dev\ENVIdataPixelsCombXA.tsv', np.hstack((data[:,1:10],data[:,-1:])), fmt='%.6f', delimiter='\t',header= ''.join(columnNames[1:10]+columnNames[-1:]), comments='')
+
     # |rowid,1-2, 1-3,....,label|
     #np.savetxt(r'D:\ITC\courseMaterial\module13GFM2\2015\code\STARS\processing\Skll\stars\train+dev\dataPixelsCombXB.tsv', np.hstack((data[:,1:2],data[:,10:] )), fmt='%.6f', delimiter='\t',header= ''.join(columnNames[1:2]+columnNames[10:]), comments='')
+    np.savetxt(r'D:\ITC\courseMaterial\module13GFM2\2015\code\STARS\processing\Skll\stars\train+dev\ENVIdataPixelsCombXB.tsv', np.hstack((data[:,1:2],data[:,10:] )), fmt='%.6f', delimiter='\t',header= ''.join(columnNames[1:2]+columnNames[10:]), comments='')
 
     # |rowid,image1, image2,....,label|  ; in this case we have the heralick images
     #data, uniqueLabels, columnNames = getPixelValues.getGeneralSinglePixelValues(shapes, "D:/ITC/courseMaterial/module13GFM2/2015/code/STARS/processing/image", fieldname, inimgfrmt = ['.tif'])

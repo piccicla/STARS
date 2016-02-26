@@ -17,37 +17,62 @@ from osgeo import osr
 from osgeo import gdalconst
 import rasterstats
 import numpy as np
+import numpy.random
 
 import utility
 
 ogr.UseExceptions()
 gdal.UseExceptions()
 
-def getSinglePixelValues(shapes, inraster, fieldname, bandcombination=True, combinations=[]):
+
+def getSinglePixelValues(shapes, inraster, fieldname,rastermask=None, combinations='*', subset=None):
     """intersect polygons/multipolygons with multiband rasters
 
         polygons and raster must have the same coordinate system!!!
+        feature falling partially or totally outside the raster will not be considered
 
     :param shapes: polygons/multipolygons shapefile
     :param inraster: multiband raster
     :param fieldname: vector fieldname that contains the labelvalue
-    :param bandcombination: bandcombination : if true the result will contain columns with the normalized difference index
-           ndi = (bandj) - (bandi)/(bandj) + (bandi)
-    :param combinations: combinations: a list of tuples , each tuple with 2 band numbers for which we want to
-    calculate the NDI [(1,2), (3,4), .....]; if empty list we take all the combinations
+    :param rastermask: raster where value 0 is the mask
+    :param bandcombination: bandcombination : if true the
+    :param combinations: possible values '*', [], None, [(),()]
+        define if the result will contain columns with normalized difference indexes
+                                    ndi = (bandj) - (bandi)/(bandj) + (bandi)
+        '*' -> all combinations
+        [] or None -> no combinations
+        [(),()] -> a list of tuples , each tuple with 2 band numbers for which we want to
+        calculate the NDI [(1,2), (3,4), .....]
+    :param  subset: integer percentage (> 0; <=100) deciding how much of each polygon you want to consider
     :return: 1) a 2d numpy array
-            --if bandcombination was False: each row contains the polygonID column, the unique id column, the apixel
+            --if combinations was [] or None: each row contains the polygonID column, the unique id column, the apixel
                    values for each raster band plus a column with the label:
                    the array shape is (numberpixels, nbands + 3)
-            --if bandcombination was True: each row contains the polygonID column, the unique id column, the pixel
+            --if combination was '*' or [(),()]: each row contains the polygonID column, the unique id column, the pixel
                    values for each raster band, the NDI bands, plus a column with the label:
-                   if conbination is empty we get all the combinations
+                   if conbination is '*' we get all the combinations
                    the array shape is (numberpixels, nbands + number of band combinations +3)
+
+            -- if subset was 0< subset<=100 the numberpixels will be decreased
             2) a set with the unique labels
             3) a list with column names
     """
 
+    #checking if combinations and subset parameters are correct
+    if all( [ combinations != '*', type(combinations) != list , combinations is not None] ):
+        raise TypeError("combinations should be '*' or [] or None or [(),()] ")
+
+    elif type(combinations) == list and len(combinations)>0:
+        if type(combinations[0]) != tuple:
+            raise TypeError("combinations format should be [(),(),...] ")
+
+    if all([type(subset) != int, subset is not None]):
+        raise TypeError('subset should be an integer or None')
+    elif type(subset) == int and not(0 < subset < 100):
+        raise ValueError('subset should be more than 0 and less than 100 ')
+
     raster = None
+    pixelmask = None
     shp = None
     lyr = None
     target_ds = None
@@ -77,11 +102,18 @@ def getSinglePixelValues(shapes, inraster, fieldname, bandcombination=True, comb
         lyr.ResetReading()
 
         # Get raster georeference info
+
+        width = raster.RasterXSize
+        height = raster.RasterYSize
+
         transform = raster.GetGeoTransform()
-        xOrigin = transform[0]
-        yOrigin = transform[3]
+        xOrigin = minx = transform[0]
+        yOrigin = maxy =  transform[3]
+        miny = transform[3] + width*transform[4] + height*transform[5]
+        maxx = transform[0] + width*transform[1] + height*transform[2]
         pixelWidth = transform[1]
         pixelHeight = transform[5]
+
 
         numfeature = 0
 
@@ -89,7 +121,7 @@ def getSinglePixelValues(shapes, inraster, fieldname, bandcombination=True, comb
         idcounter=1
 
         # if we want the normalized indexes we need to add additional columns to the outputdata
-        if bandcombination:
+        if combinations:
             # get the number of combinations and the column names
             numberCombinations, comb_column_names = utility.combination_count(nbands)
 
@@ -97,6 +129,10 @@ def getSinglePixelValues(shapes, inraster, fieldname, bandcombination=True, comb
             # therefore we get only the first half of the combinations
             numberCombinations = numberCombinations/2
             comb_column_names = comb_column_names[0: int(numberCombinations)]
+
+        if rastermask:
+            pixelmask = gdal.Open(rastermask)
+
 
         for feat in lyr:
 
@@ -139,6 +175,11 @@ def getSinglePixelValues(shapes, inraster, fieldname, bandcombination=True, comb
             ymin = min(pointsY)
             ymax = max(pointsY)
 
+            #check if this feature is completely inside the raster, if not skip it
+            if any([xmin < minx, xmax > maxx, ymin < miny, ymax > maxy]):
+                print('feature with id = %d is falling outside the raster and will not be considered'%feat.GetFID())
+                continue
+
             # Specify offset and rows and columns to read
             xoff = int((xmin - xOrigin)/pixelWidth)
             yoff = int((yOrigin - ymax)/pixelWidth)
@@ -179,6 +220,11 @@ def getSinglePixelValues(shapes, inraster, fieldname, bandcombination=True, comb
             dataraster = raster.ReadAsArray(xoff, yoff, xcount, ycount).astype(np.float)
             datamask = target_ds.ReadAsArray(0, 0, xcount, ycount).astype(np.float)
 
+            if rastermask: #if we have a mask (e.g trees)
+                pixelmasker = pixelmask.ReadAsArray(xoff, yoff, xcount, ycount).astype(np.float)
+                datamask = datamask * pixelmasker
+
+
             # extract the data for each band
             data = []
             for i in range(nbands):
@@ -195,16 +241,46 @@ def getSinglePixelValues(shapes, inraster, fieldname, bandcombination=True, comb
 
             vstackdata = np.vstack(data).T
 
-            if bandcombination and not combinations:
-                # multi band samples and labels : shape -> num.pixels * (8 bands+ all number of band combinations + 3)
-                outdata.append(np.hstack((polygonID, id,  np.hstack((vstackdata, np.zeros((vstackdata.shape[0],numberCombinations)))),label)))
+            #calculate once indexes for subsetting polygons; we will use this in the next "if combinations"
+            if subset:
+                subsize = int((polygonID.shape[0]) * subset/100)
+                idxsubsize = np.array(range(0, polygonID.shape[0]))
+                numpy.random.shuffle(idxsubsize)
+                idxsubsize = idxsubsize[:subsize]
+                #print(idxsubsize.shape)
 
-            elif bandcombination and combinations:
-                # multi band samples and labels : shape -> num.pixels * (8 bands+ custom band combinations + 3)
-                outdata.append(np.hstack((polygonID, id,  np.hstack((vstackdata, np.zeros((vstackdata.shape[0],len(combinations))))),label)))
-            else:
-                # multi band samples and labels : shape -> num.pixels * (8 bands+3)
-                outdata.append(np.hstack((polygonID, id,  vstackdata, label)))
+            if combinations:  #  '*'  or [(),(),...]  -> all combinations or specific combinations
+
+                if combinations == '*':  #all band combinations in the output
+                    if subset:
+                        # multi band samples and labels : shape -> num. subsetted pixels * (8 bands+ all number of band combinations + 3)
+                        # use numpy fancy indexing to subset polygons
+                        outdata.append(np.hstack((polygonID[idxsubsize], id[idxsubsize],  np.hstack((vstackdata, np.zeros((vstackdata.shape[0],numberCombinations))))[idxsubsize],label[idxsubsize])))
+
+                    else: #no suset
+                        # multi band samples and labels : shape -> num.pixels * (8 bands+ all number of band combinations + 3)
+                        outdata.append(np.hstack((polygonID, id,  np.hstack((vstackdata, np.zeros((vstackdata.shape[0],numberCombinations)))),label)))
+
+                else:  # specific band combinations
+                    if subset:
+                        # multi band samples and labels : shape -> num. subsetted pixels * (8 bands+ custom band combinations + 3)
+                        # use numpy fancy indexing to subset polygons
+                        outdata.append(np.hstack((polygonID[idxsubsize], id[idxsubsize],  np.hstack((vstackdata, np.zeros((vstackdata.shape[0],len(combinations)))))[idxsubsize],label[idxsubsize])))
+                    else: #no suset
+                        # multi band samples and labels : shape -> num.pixels * (8 bands+ custom band combinations + 3)
+                        outdata.append(np.hstack((polygonID, id,  np.hstack((vstackdata, np.zeros((vstackdata.shape[0],len(combinations))))),label)))
+
+            elif not combinations or combinations is None:  # [] or None  -> no band combinations in the output
+
+                if subset:
+                    # multi band samples and labels : shape -> num. subsetted pixels * (8 bands+3)
+                    # use numpy fancy indexing to subset polygons
+                    outdata.append(np.hstack((polygonID[idxsubsize], id[idxsubsize],  vstackdata[idxsubsize], label[idxsubsize])))
+                else: #no suset
+                    # multi band samples and labels : shape -> num.pixels * (8 bands+3)
+                    outdata.append(np.hstack((polygonID, id,  vstackdata, label)))
+
+
 
             # Mask zone of raster
             #zoneraster = np.ma.masked_array(dataraster,  np.logical_not(datamask))
@@ -226,7 +302,7 @@ def getSinglePixelValues(shapes, inraster, fieldname, bandcombination=True, comb
         for i in range(nbands):
             columnNames.append("band" + str(i+1)+"\t")
         # if we want the normalized indexes we need additional columns to the outputdata
-        if bandcombination and not combinations:  #this is when we want all the combinations
+        if combinations == '*':  #this is when we want all the combinations
 
             columnNames += utility.column_names_to_string(comb_column_names)
 
@@ -242,7 +318,7 @@ def getSinglePixelValues(shapes, inraster, fieldname, bandcombination=True, comb
                 print(".", end="")
             print()
 
-        elif bandcombination and combinations: # this is when we want specific combination using the combination parameter
+        elif all([combinations ,combinations is not None]): # this is when we want specific combinations -> [(),(),...]
 
             columnNames += utility.column_names_to_string(combinations)
 
@@ -265,6 +341,7 @@ def getSinglePixelValues(shapes, inraster, fieldname, bandcombination=True, comb
 
         #give control back to c++ to free memory
         if raster: raster = None
+        if pixelmask:  pixelmask = None
         if shp: shp = None
         if lyr: lyr = None
         if target_ds: target_ds = None
@@ -272,22 +349,37 @@ def getSinglePixelValues(shapes, inraster, fieldname, bandcombination=True, comb
         if outDataSet: outDataSet = None
 
 
-def getGeneralSinglePixelValues(shapes, folderpath, fieldname, inimgfrmt = ['.tif']):
+#TODO: add rastermask and subset logic
+def getGeneralSinglePixelValues(shapes, folderpath, fieldname, inimgfrmt = ['.tif'], rastermask=None, subset=None):
     """ general function to intersect polygons/multipolygons with a group of multiband rasters
         IMPORTANT
         polygons and raster must have the same coordinate system!!!
         the bands of a raster must have the same data type
+        feature falling partially or totally outside the raster will not be considered
+
     :param shapes: polygons/multipolygons shapefile
     :param folderpath: folder with multiband rasters
     :param fieldname: vector fieldname that contains the labelvalue
     :param inimgfrmt: a list of image formats necessary to filter the input folder content (default is tif format)
+    :param rastermask: raster where value 0 is the mask
+    :param  subset: integer percentage (> 0; <=100) deciding how much of each polygon you want to consider
     :return: - a 2d numpy array,
                 each row contains the polygonID column, the unique id column, the pixel
                 values for each raster band plus a column with the label:
                 the array shape is (numberpixels, numberofrasters*nbands + 3)
+
+                if mask the max numberpixels  per polygon may decrease
+                if subset the numberpixels will decrease
+
              - a set with the unique labels
              - a list with column names
     """
+
+    #checking if subset parameters is correct
+    if all([type(subset) != int, subset is not None]):
+        raise TypeError('subset should be an integer or None')
+    elif type(subset) == int and not(0 < subset < 100):
+        raise ValueError('subset should be more than 0 and less than 100 ')
 
     raster = None     
     shp = None        
@@ -338,11 +430,19 @@ def getGeneralSinglePixelValues(shapes, folderpath, fieldname, inimgfrmt = ['.ti
                 raster_data_type = band.DataType
 
                 # Get raster georeference info
+
+                width = raster.RasterXSize
+                height = raster.RasterYSize
+
                 transform = raster.GetGeoTransform()
-                xOrigin = transform[0]
-                yOrigin = transform[3]
+                xOrigin = minx = transform[0]
+                yOrigin = maxy =  transform[3]
+                miny = transform[3] + width*transform[4] + height*transform[5]
+                maxx = transform[0] + width*transform[1] + height*transform[2]
                 pixelWidth = transform[1]
                 pixelHeight = transform[5]
+
+
 
                 numfeature = 0
 
@@ -394,6 +494,11 @@ def getGeneralSinglePixelValues(shapes, folderpath, fieldname, inimgfrmt = ['.ti
                     xmax = max(pointsX)
                     ymin = min(pointsY)
                     ymax = max(pointsY)
+
+                    #check if this feature is completely inside the raster, if not skip it
+                    if any([xmin < minx, xmax > maxx, ymin < miny, ymax > maxy]):
+                        print('feature with id = %d is falling outside the raster and will not be considered'%feat.GetFID())
+                        continue
 
                     # Specify offset and rows and columns to read
                     xoff = int((xmin - xOrigin)/pixelWidth)
@@ -510,10 +615,13 @@ def getGeneralSinglePixelValues(shapes, folderpath, fieldname, inimgfrmt = ['.ti
             band = None
 
 
+#TODO: add rastermask logic and modify combinations logic;
 def getMeanPixelValues(shapes, inraster, fieldname, bandcombination =True):
     """intersect shapefile with multiband rasters
 
         shapefile and raster must have the same coordinate system!!!
+
+        feature falling partially or totally outside the raster will output values -999 for all bands and combinations
 
     :param shapes: shapefile
     :param inraster: multiband raster
@@ -537,6 +645,7 @@ def getMeanPixelValues(shapes, inraster, fieldname, bandcombination =True):
         # open image
         # import the NDVI raster and get number of bands
         dataset = gdal.Open(inraster)
+
         nbands = dataset.RasterCount
 
         print(nbands)
@@ -555,7 +664,7 @@ def getMeanPixelValues(shapes, inraster, fieldname, bandcombination =True):
             print("getting mean values for band %d" % (i+1))
             crossing = rasterstats.zonal_stats( shapes, inraster, stats=["mean"], band_num =i+1, geojson_out=True)
             #print (crossing)
-            meanValues.append([j["properties"]["mean"] for j in crossing])
+            meanValues.append([j["properties"]["mean"] for j in crossing ])
             # we get the polygons ID only once because they are the same for the 8 bands
             if i == 0:
                 polygonIDs.append([int(j["id"])+1 for j in crossing])
@@ -567,6 +676,14 @@ def getMeanPixelValues(shapes, inraster, fieldname, bandcombination =True):
 
         #define samples
         samples = np.array(meanValues).T
+
+        #get rid of the rows with None values(this is where the polygon is outside the raster)
+        samplesShape = samples.shape
+        #print(samplesShape)
+        #print(len(polygonIDs))
+        mask = samples == np.array(None)
+        samples[mask] = -999.0
+        #samples = samples[mask].reshape(-1,samples.shape[1])
 
         #if we want the band combinations, add columns to the samples
         if bandcombination:
@@ -580,12 +697,14 @@ def getMeanPixelValues(shapes, inraster, fieldname, bandcombination =True):
 
             #calculate the NDI for all the band combinations
             print("calculating NDI for " + str(numberCombinations) + " columns")
+
             for i in combColumnNames:
                 #get column index  ->  i[0]-i[1]/i[0]+i[1]
                 #which column we want to update?
                 idx = combColumnNames.index(i)+ nbands
                 #calculate index  # the -1 is there because the numpy array index starts from 0
-                samples[:, idx] = (samples[:, i[0]-1] - samples[:, i[1]-1]) / (samples[:, i[0]-1] + samples[:, i[1]-1])
+                samples[:, idx] = np.where( (samples[:, i[0]-1] - samples[:, i[1]-1]) == 0.0, -999.0,(samples[:, i[0]-1] - samples[:, i[1]-1]) / (samples[:, i[0]-1] + samples[:, i[1]-1]))
+                #samples[:, idx] = (samples[:, i[0]-1] - samples[:, i[1]-1]) / (samples[:, i[0]-1] + samples[:, i[1]-1])
                 print(".", end="")
             print()
 
