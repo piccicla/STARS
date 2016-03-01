@@ -68,7 +68,7 @@ tilesize =(1024,1024)
 
 # mean=True to get the average multiband pixel values inside polygons
 # mean=False to get all the multiband pixel values inside polygons
-MEAN = True
+MEAN = False
 
 ##########################################################
 
@@ -86,7 +86,7 @@ if MEAN:
 else:
 
 
-    data, uniqueLabels,columnNames = getPixelValues.getSinglePixelValues(shapes, img, fieldname)
+    data, uniqueLabels,columnNames = getPixelValues.getSinglePixelValues(shapes, img, fieldname, subset=10)
 
     sys.exit()
     #output data to skll, we don't export the polygonID   |rowid,band1, band2,..., 1-2, 1-3,....,label|

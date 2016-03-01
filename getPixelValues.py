@@ -25,7 +25,7 @@ ogr.UseExceptions()
 gdal.UseExceptions()
 
 
-def getSinglePixelValues(shapes, inraster, fieldname,rastermask=None, combinations='*', subset=None):
+def getSinglePixelValues(shapes, inraster, fieldname,rastermask=None, combinations='*', subset=None, returnsubset = False):
     """intersect polygons/multipolygons with multiband rasters
 
         polygons and raster must have the same coordinate system!!!
@@ -43,7 +43,11 @@ def getSinglePixelValues(shapes, inraster, fieldname,rastermask=None, combinatio
         [] or None -> no combinations
         [(),()] -> a list of tuples , each tuple with 2 band numbers for which we want to
         calculate the NDI [(1,2), (3,4), .....]
-    :param  subset: integer percentage (> 0; <=100) deciding how much of each polygon you want to consider
+    :param  subset: integer or dictionary
+                    - integer percentage (> 0; <100) deciding how much of each polygon you want to consider
+                    - a dictionary { polygonID: numpy.ndarray} where the numpy.ndarray is used to apply fancy index
+                    to filter the polygon with ID == polygonID
+    :param  returnsubset: bool, if true a subset datastructure { polygonID: numpy.ndarray} is returned
     :return: 1) a 2d numpy array
             --if combinations was [] or None: each row contains the polygonID column, the unique id column, the apixel
                    values for each raster band plus a column with the label:
@@ -56,20 +60,30 @@ def getSinglePixelValues(shapes, inraster, fieldname,rastermask=None, combinatio
             -- if subset was 0< subset<=100 the numberpixels will be decreased
             2) a set with the unique labels
             3) a list with column names
+            4) if returnsubset is True will return the subset datastructure { polygonID: numpy.ndarray}
     """
 
     #checking if combinations and subset parameters are correct
-    if all( [ combinations != '*', type(combinations) != list , combinations is not None] ):
+    if all([combinations != '*', type(combinations) != list , combinations is not None] ):
         raise TypeError("combinations should be '*' or [] or None or [(),()] ")
 
     elif type(combinations) == list and len(combinations)>0:
         if type(combinations[0]) != tuple:
             raise TypeError("combinations format should be [(),(),...] ")
 
-    if all([type(subset) != int, subset is not None]):
-        raise TypeError('subset should be an integer or None')
+    if all([type(subset) != int, type(subset) != dict, subset is not None]):
+        raise TypeError('subset should be an integer, a dictionary, or None')
     elif type(subset) == int and not(0 < subset < 100):
         raise ValueError('subset should be more than 0 and less than 100 ')
+    elif type(subset) == dict and not subset:
+        raise ValueError('subset dictionary should not be empty')
+    elif type(subset) == dict and not type(next(iter(subset.values()))) == np.ndarray:
+        raise ValueError('subset should be a dictionary of ndarrays')
+
+
+    if returnsubset:
+        returnsubset = {}
+
 
     raster = None
     pixelmask = None
@@ -108,7 +122,7 @@ def getSinglePixelValues(shapes, inraster, fieldname,rastermask=None, combinatio
 
         transform = raster.GetGeoTransform()
         xOrigin = minx = transform[0]
-        yOrigin = maxy =  transform[3]
+        yOrigin = maxy = transform[3]
         miny = transform[3] + width*transform[4] + height*transform[5]
         maxx = transform[0] + width*transform[1] + height*transform[2]
         pixelWidth = transform[1]
@@ -243,11 +257,21 @@ def getSinglePixelValues(shapes, inraster, fieldname,rastermask=None, combinatio
 
             #calculate once indexes for subsetting polygons; we will use this in the next "if combinations"
             if subset:
-                subsize = int((polygonID.shape[0]) * subset/100)
-                idxsubsize = np.array(range(0, polygonID.shape[0]))
-                numpy.random.shuffle(idxsubsize)
-                idxsubsize = idxsubsize[:subsize]
-                #print(idxsubsize.shape)
+                if type(subset) == int: #if the subset was a percentage we need to define the fancy indexer
+                    subsize = int((polygonID.shape[0]) * subset/100)
+                    idxsubsize = np.array(range(0, polygonID.shape[0]))
+                    numpy.random.shuffle(idxsubsize)
+                    idxsubsize = idxsubsize[:subsize]
+                    #print(idxsubsize.shape)
+
+                    if returnsubset: #if we want to return the subset datastructure we need add a key:value
+                        returnsubset[int(polygonID[0,0])] = idxsubsize
+
+                else: #if the subset was a dictionary we extract the correct fancy indexer by key
+                    print(int(polygonID[0,0]))
+                    idxsubsize = subset[int(polygonID[0,0])]
+                    #print(idxsubsize)
+
 
             if combinations:  #  '*'  or [(),(),...]  -> all combinations or specific combinations
 
@@ -335,6 +359,12 @@ def getSinglePixelValues(shapes, inraster, fieldname,rastermask=None, combinatio
             print()
 
         columnNames.append("label")
+
+        if returnsubset:
+            if type(subset) == int:
+                return (outdata, uniqueLabels, columnNames, returnsubset)
+            else: #if the subset was already a datasturecture we just return it
+                return (outdata, uniqueLabels, columnNames, subset)
         return (outdata, uniqueLabels, columnNames)
 
     finally:
@@ -350,7 +380,7 @@ def getSinglePixelValues(shapes, inraster, fieldname,rastermask=None, combinatio
 
 
 #TODO: add rastermask and subset logic
-def getGeneralSinglePixelValues(shapes, folderpath, fieldname, inimgfrmt = ['.tif'], rastermask=None, subset=None):
+def getGeneralSinglePixelValues(shapes, folderpath, fieldname, inimgfrmt = ['.tif'], rastermask=None, subset=None, returnsubset = False):
     """ general function to intersect polygons/multipolygons with a group of multiband rasters
         IMPORTANT
         polygons and raster must have the same coordinate system!!!
@@ -362,24 +392,41 @@ def getGeneralSinglePixelValues(shapes, folderpath, fieldname, inimgfrmt = ['.ti
     :param fieldname: vector fieldname that contains the labelvalue
     :param inimgfrmt: a list of image formats necessary to filter the input folder content (default is tif format)
     :param rastermask: raster where value 0 is the mask
-    :param  subset: integer percentage (> 0; <=100) deciding how much of each polygon you want to consider
-    :return: - a 2d numpy array,
+    :param  subset: integer or dictionary
+                    - integer percentage (> 0; <100) deciding how much of each polygon you want to consider
+                    - a dictionary { polygonID: numpy.ndarray} where the numpy.ndarray is used to apply fancy index
+                    to filter the polygon with ID == polygonID
+    :param  returnsubset: bool, if true a subset datastructure { polygonID: numpy.ndarray} is returned
+    :return: 1) a 2d numpy array,
                 each row contains the polygonID column, the unique id column, the pixel
                 values for each raster band plus a column with the label:
                 the array shape is (numberpixels, numberofrasters*nbands + 3)
 
                 if mask the max numberpixels  per polygon may decrease
                 if subset the numberpixels will decrease
-
-             - a set with the unique labels
-             - a list with column names
+             2) a set with the unique labels
+             3) a list with column names
+             4) if returnsubset is True will return the subset datastructure { polygonID: numpy.ndarray}
     """
 
     #checking if subset parameters is correct
-    if all([type(subset) != int, subset is not None]):
-        raise TypeError('subset should be an integer or None')
+    if all([type(subset) != int, type(subset) != dict, subset is not None]):
+        raise TypeError('subset should be an integer, a dictionary, or None')
     elif type(subset) == int and not(0 < subset < 100):
         raise ValueError('subset should be more than 0 and less than 100 ')
+    elif type(subset) == dict and not subset:
+        raise ValueError('subset dictionary should not be empty')
+    elif type(subset) == dict and not type(next(iter(subset.values()))) == np.ndarray:
+        raise ValueError('subset should be a dictionary of ndarrays')
+
+
+
+
+    #if returnsubset:
+        #returnsubset = {}
+
+    subsetcollection = {}
+
 
     raster = None     
     shp = None        
@@ -388,7 +435,7 @@ def getGeneralSinglePixelValues(shapes, folderpath, fieldname, inimgfrmt = ['.ti
     outDataSet = None 
     outLayer = None  
     band = None
-
+    pixelmask = None
     outdata = []
     
     try:
@@ -442,8 +489,6 @@ def getGeneralSinglePixelValues(shapes, folderpath, fieldname, inimgfrmt = ['.ti
                 pixelWidth = transform[1]
                 pixelHeight = transform[5]
 
-
-
                 numfeature = 0
 
                 # keep trak of the number of ids, necessary to assign id to subsequent polygons
@@ -453,6 +498,10 @@ def getGeneralSinglePixelValues(shapes, folderpath, fieldname, inimgfrmt = ['.ti
                 lyr.ResetReading()
 
                 intermediatedata = []
+
+
+                if rastermask:
+                    pixelmask = gdal.Open(rastermask)
 
                 for feat in lyr:
 
@@ -540,6 +589,10 @@ def getGeneralSinglePixelValues(shapes, folderpath, fieldname, inimgfrmt = ['.ti
                     dataraster = raster.ReadAsArray(xoff, yoff, xcount, ycount).astype(np.float)
                     datamask = target_ds.ReadAsArray(0, 0, xcount, ycount).astype(np.float)
 
+                    if rastermask: #if we have a mask (e.g trees)
+                        pixelmasker = pixelmask.ReadAsArray(xoff, yoff, xcount, ycount).astype(np.float)
+                        datamask = datamask * pixelmasker
+
                     #extract the data for each band
                     data = []
                     for j in range(nbands):
@@ -558,11 +611,42 @@ def getGeneralSinglePixelValues(shapes, folderpath, fieldname, inimgfrmt = ['.ti
                     idcounter += data[0].shape[0]
                     vstackdata = np.vstack(data).T
 
-                    if imgcounter == 1:
-                        intermediatedata.append(np.hstack((polygonID, id,  vstackdata)))
-                    else:
-                        intermediatedata.append(vstackdata)
 
+                    #if subset we need to define the correct fancy indexing
+                    if subset:
+
+                        #if the subset was a percentage we need to define the fancy indexer
+                        #we can get it only for the first image
+                        if type(subset) == int and imgcounter == 1:
+                            subsize = int((polygonID.shape[0]) * subset/100)
+                            idxsubsize = np.array(range(0, polygonID.shape[0]))
+                            numpy.random.shuffle(idxsubsize)
+                            idxsubsize = idxsubsize[:subsize]
+                            #print(idxsubsize.shape)
+
+                            #we store the fancy index for this polygon
+                            subsetcollection[int(polygonID[0,0])] = idxsubsize
+
+                        #if this is not the first image we get the correct fancy index from the collection
+                        elif type(subset) == int:
+                            idxsubsize = subsetcollection[int(polygonID[0,0])]
+
+                        else: #if the subset was a dictionary we extract the correct fancy indexer by key
+                            print(int(polygonID[0,0]))
+                            idxsubsize = subset[int(polygonID[0,0])]
+                            #print(idxsubsize)
+
+                        # and we apply the fancy indexing
+                        if imgcounter == 1:
+                            intermediatedata.append(np.hstack((polygonID, id,  vstackdata))[idxsubsize])
+                        else:
+                            intermediatedata.append(vstackdata[idxsubsize])
+
+                    else: #there is no subset to apply, take all
+                        if imgcounter == 1:
+                            intermediatedata.append(np.hstack((polygonID, id,  vstackdata)))
+                        else:
+                            intermediatedata.append(vstackdata)
 
                     # Mask zone of raster
                     #zoneraster = np.ma.masked_array(dataraster,  np.logical_not(datamask))
@@ -594,6 +678,12 @@ def getGeneralSinglePixelValues(shapes, folderpath, fieldname, inimgfrmt = ['.ti
         outdata = np.hstack((outdata, np.vstack(labels)))
 
         columnNames.append("label")
+
+        if returnsubset:
+            if type(subset) == int:
+                return (outdata, uniqueLabels, columnNames, subsetcollection)
+            else: #if the subset was already a datastucture we just return it
+                return (outdata, uniqueLabels, columnNames, subset)
         return (outdata, uniqueLabels, columnNames)
 
     finally:
@@ -601,6 +691,8 @@ def getGeneralSinglePixelValues(shapes, folderpath, fieldname, inimgfrmt = ['.ti
         #give control back to c++ to free memory
         if raster:
             raster = None
+        if pixelmask:
+            pixelmask = None
         if shp:
             shp = None
         if lyr:
