@@ -3,7 +3,7 @@
 # Name:        main.py
 # Purpose:
 #
-# Author:      claudio piccinin
+# Author:      claudio piccinini
 #
 # Created:     11/09/2015
 #-------------------------------------------------------------------------------
@@ -68,7 +68,7 @@ tilesize =(1024,1024)
 
 # mean=True to get the average multiband pixel values inside polygons
 # mean=False to get all the multiband pixel values inside polygons
-MEAN = False
+MEAN = True
 
 ##########################################################
 
@@ -78,17 +78,15 @@ gdal.UseExceptions()
 
 # prepare supervised data and output it to the skll folder
 if MEAN:
-    data, uniqueLabels, columnNames = getPixelValues.getMeanPixelValues(shapes, img, fieldname )
+    data, uniqueLabels, columnNames = getPixelValues.getMeanPixelValues(shapes, img, fieldname, nodatavalue=-999.0,combinations=[(1,2),(2,1)] )
 
     # output data to skll folder, we don't export the polygonID
     np.savetxt("dataMeanComb.tsv", data[:, 1:], fmt="%.4f", delimiter="\t", header="".join(columnNames[1:]),comments="")
 
 else:
 
-
     data, uniqueLabels,columnNames = getPixelValues.getSinglePixelValues(shapes, img, fieldname, subset=10)
 
-    sys.exit()
     #output data to skll, we don't export the polygonID   |rowid,band1, band2,..., 1-2, 1-3,....,label|
     # the first row will contain the field names
     np.savetxt('ENVIdataPixelsComb.tsv', data[:,1:], fmt='%.4f', delimiter='\t', header= ''.join(columnNames[1:]), comments='')

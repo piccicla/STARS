@@ -268,7 +268,7 @@ def getSinglePixelValues(shapes, inraster, fieldname,rastermask=None, combinatio
                         returnsubset[int(polygonID[0,0])] = idxsubsize
 
                 else: #if the subset was a dictionary we extract the correct fancy indexer by key
-                    print(int(polygonID[0,0]))
+                    #print(int(polygonID[0,0]))
                     idxsubsize = subset[int(polygonID[0,0])]
                     #print(idxsubsize)
 
@@ -378,8 +378,7 @@ def getSinglePixelValues(shapes, inraster, fieldname,rastermask=None, combinatio
         if outLayer: outLayer = None
         if outDataSet: outDataSet = None
 
-
-#TODO: add rastermask and subset logic
+#TODO: test  subset logic
 def getGeneralSinglePixelValues(shapes, folderpath, fieldname, inimgfrmt = ['.tif'], rastermask=None, subset=None, returnsubset = False):
     """ general function to intersect polygons/multipolygons with a group of multiband rasters
         IMPORTANT
@@ -419,11 +418,6 @@ def getGeneralSinglePixelValues(shapes, folderpath, fieldname, inimgfrmt = ['.ti
     elif type(subset) == dict and not type(next(iter(subset.values()))) == np.ndarray:
         raise ValueError('subset should be a dictionary of ndarrays')
 
-
-
-
-    #if returnsubset:
-        #returnsubset = {}
 
     subsetcollection = {}
 
@@ -706,20 +700,31 @@ def getGeneralSinglePixelValues(shapes, folderpath, fieldname, inimgfrmt = ['.ti
         if band:
             band = None
 
-
-#TODO: add rastermask logic and modify combinations logic;
-def getMeanPixelValues(shapes, inraster, fieldname, bandcombination =True):
+#TODO:  test combinations logic
+def getMeanPixelValues(shapes, inraster, fieldname, combinations ='*', nodatavalue=None):
     """intersect shapefile with multiband rasters
 
         shapefile and raster must have the same coordinate system!!!
 
-        feature falling partially or totally outside the raster will output values -999 for all bands and combinations
+        feature falling partially or totally outside the raster will output nodatavalue for all bands and combinations
+
+        a nodatavalue == 0 is not allowed because it will crash
 
     :param shapes: shapefile
     :param inraster: multiband raster
     :param fieldname: vector fieldname that contains the labelvalue
-    :param bandcombination: bandcombination : if true the result will contain columns with the normalized difference index
-           ndi = (bandj) - (bandi)/(bandj) + (bandi)
+
+    :param combinations: possible values '*', [], None, [(),()]
+        define if the result will contain columns with normalized difference indexes
+                                    ndi = (bandj) - (bandi)/(bandj) + (bandi)
+        '*' -> all combinations
+        [] or None -> no combinations
+        [(),()] -> a list of tuples , each tuple with 2 band numbers for which we want to
+        calculate the NDI [(1,2), (3,4), .....]
+
+    :param nodatavalue: the nodatavalue to assign when polygons falls outside the raster;
+                        if None it will get the nodatavalue from the raster
+
     :return: - a 2d numpy array,
                 -if bandcombination was False: each row contains the polygonID column, the unique id column, the average pixel
                 values for each raster band plus a column with the label:
@@ -731,6 +736,16 @@ def getMeanPixelValues(shapes, inraster, fieldname, bandcombination =True):
             - a list with column names
     """
 
+    #checking if combinations and subset parameters are correct
+    if all([combinations != '*', type(combinations) != list , combinations is not None] ):
+        raise TypeError("combinations should be '*' or [] or None or [(),()] ")
+
+    elif type(combinations) == list and len(combinations)>0:
+        if type(combinations[0]) != tuple:
+            raise TypeError("combinations format should be [(),(),...] ")
+
+    if nodatavalue == 0:
+        raise  ValueError("a nodatavalue == 0.0 is not allowed")
     dataset = None
     layer = None
     try:
@@ -739,6 +754,15 @@ def getMeanPixelValues(shapes, inraster, fieldname, bandcombination =True):
         dataset = gdal.Open(inraster)
 
         nbands = dataset.RasterCount
+
+        if nodatavalue is None:
+            band = dataset.GetRasterBand(1)
+            nodatavalue = band.GetNoDataValue()
+            band = None
+            if nodatavalue == 0:
+                raise  ValueError("the raster has a nodatavalue == 0.0, but this is not allowed,"
+                                  " please rerun the code with a custom nodatavalue argument")
+        #print(nodatavalue)
 
         print(nbands)
 
@@ -751,6 +775,7 @@ def getMeanPixelValues(shapes, inraster, fieldname, bandcombination =True):
 
         # store the field names
         columnNames = ["polyID\t", "id\t"]
+
 
         for i in range(nbands):
             print("getting mean values for band %d" % (i+1))
@@ -769,24 +794,37 @@ def getMeanPixelValues(shapes, inraster, fieldname, bandcombination =True):
         #define samples
         samples = np.array(meanValues).T
 
-        #get rid of the rows with None values(this is where the polygon is outside the raster)
-        samplesShape = samples.shape
+        #get rid of the rows with None values(this is where the polygon is outside the raster) and assign nodatavalue
+        #samplesShape = samples.shape
         #print(samplesShape)
         #print(len(polygonIDs))
-        mask = samples == np.array(None)
-        samples[mask] = -999.0
+        mask = (samples == np.array(None))
+        samples[mask] = nodatavalue
         #samples = samples[mask].reshape(-1,samples.shape[1])
 
-        #if we want the band combinations, add columns to the samples
-        if bandcombination:
 
-            #get the number of combinations and the column names
-            numberCombinations, combColumnNames = utility.combination_count(nbands)
+        #if we want the band combinations, add columns to the samples
+        if combinations: #'*'  or [(),(),...]  -> all combinations or specific combinations
+
+            if combinations == '*':
+                #get the number of combinations and the column names
+                numberCombinations, combColumnNames = utility.combination_count(nbands)
+
+                #combination_count() will return all the combination, but pixel value of  ndi A/B is just the inverse of ndi 2/1;
+                # therefore we get only the first half of the combinations
+                numberCombinations = numberCombinations/2
+                combColumnNames = combColumnNames[0: int(numberCombinations)]
+
+
+            elif all([combinations ,combinations is not None]): # this is when we want specific combinations -> [(),(),...]
+                combColumnNames = combinations
+                numberCombinations = len(combinations)
+
+
             #add columns to store th normalized indexes
             samples = np.hstack((samples, np.zeros((samples.shape[0], numberCombinations))))
             #add column names
             columnNames += utility.column_names_to_string(combColumnNames)
-
             #calculate the NDI for all the band combinations
             print("calculating NDI for " + str(numberCombinations) + " columns")
 
@@ -795,7 +833,7 @@ def getMeanPixelValues(shapes, inraster, fieldname, bandcombination =True):
                 #which column we want to update?
                 idx = combColumnNames.index(i)+ nbands
                 #calculate index  # the -1 is there because the numpy array index starts from 0
-                samples[:, idx] = np.where( (samples[:, i[0]-1] - samples[:, i[1]-1]) == 0.0, -999.0,(samples[:, i[0]-1] - samples[:, i[1]-1]) / (samples[:, i[0]-1] + samples[:, i[1]-1]))
+                samples[:, idx] = np.where( (samples[:, i[0]-1] - samples[:, i[1]-1]) == 0.0, nodatavalue,(samples[:, i[0]-1] - samples[:, i[1]-1]) / (samples[:, i[0]-1] + samples[:, i[1]-1]))
                 #samples[:, idx] = (samples[:, i[0]-1] - samples[:, i[1]-1]) / (samples[:, i[0]-1] + samples[:, i[1]-1])
                 print(".", end="")
             print()
