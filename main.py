@@ -68,7 +68,7 @@ tilesize =(1024,1024)
 
 # mean=True to get the average multiband pixel values inside polygons
 # mean=False to get all the multiband pixel values inside polygons
-MEAN = True
+MEAN = False
 
 ##########################################################
 
@@ -78,19 +78,19 @@ gdal.UseExceptions()
 
 # prepare supervised data and output it to the skll folder
 if MEAN:
-    data, uniqueLabels, columnNames = getPixelValues.getMeanPixelValues(shapes, img, fieldname, nodatavalue=-999.0,combinations=[(1,2),(2,1)] )
-
+    data, uniqueLabels, columnNames = getPixelValues.getMeanPixelValues(shapes, img, fieldname, nodatavalue=-999.0,combinations=[])
     # output data to skll folder, we don't export the polygonID
     np.savetxt("dataMeanComb.tsv", data[:, 1:], fmt="%.4f", delimiter="\t", header="".join(columnNames[1:]),comments="")
 
 else:
 
-    data, uniqueLabels,columnNames = getPixelValues.getSinglePixelValues(shapes, img, fieldname, subset=10)
+    data, uniqueLabels,columnNames,subsetcollection = getPixelValues.getSinglePixelValues(shapes, img, fieldname,rastermask=treemask,combinations='*',subset=10, returnsubset=True)
 
     #output data to skll, we don't export the polygonID   |rowid,band1, band2,..., 1-2, 1-3,....,label|
     # the first row will contain the field names
     np.savetxt('ENVIdataPixelsComb.tsv', data[:,1:], fmt='%.4f', delimiter='\t', header= ''.join(columnNames[1:]), comments='')
 
+    #############   BORUTA  #####################
     # there is no header the field names  |band1, band2,..., 1-2, 1-3,....|
     #np.savetxt('dataPixelsCombX.csv', data[:,2:-1], fmt='%.4f', delimiter=',')
     np.savetxt('ENVIdataPixelsCombX.csv', data[:,2:-1], fmt='%.4f', delimiter=',')
@@ -101,7 +101,7 @@ else:
     #np.savetxt('dataPixelsCombY.csv', data[:,-1:], fmt='%.1f', delimiter=',')
     np.savetxt('ENVIdataPixelsCombY.csv', data[:,-1:], fmt='%.1f', delimiter=',')
 
-
+    ############    SKLL    ####################
     # |rowid,band1, band2,,....,label|
     #np.savetxt(r'D:\ITC\courseMaterial\module13GFM2\2015\code\STARS\processing\Skll\stars\train+dev\dataPixelsCombXA.tsv', np.hstack((data[:,1:10],data[:,-1:])), fmt='%.6f', delimiter='\t',header= ''.join(columnNames[1:10]+columnNames[-1:]), comments='')
     np.savetxt(r'D:\ITC\courseMaterial\module13GFM2\2015\code\STARS\processing\Skll\stars\train+dev\ENVIdataPixelsCombXA.tsv', np.hstack((data[:,1:10],data[:,-1:])), fmt='%.6f', delimiter='\t',header= ''.join(columnNames[1:10]+columnNames[-1:]), comments='')
@@ -111,17 +111,18 @@ else:
     np.savetxt(r'D:\ITC\courseMaterial\module13GFM2\2015\code\STARS\processing\Skll\stars\train+dev\ENVIdataPixelsCombXB.tsv', np.hstack((data[:,1:2],data[:,10:] )), fmt='%.6f', delimiter='\t',header= ''.join(columnNames[1:2]+columnNames[10:]), comments='')
 
     # |rowid,image1, image2,....,label|  ; in this case we have the heralick images
-    #data, uniqueLabels, columnNames = getPixelValues.getGeneralSinglePixelValues(shapes, "D:/ITC/courseMaterial/module13GFM2/2015/code/STARS/processing/image", fieldname, inimgfrmt = ['.tif'])
-    #np.savetxt('D:/ITC/courseMaterial/module13GFM2/2015/code/STARS/processing/Skll/stars/train+dev/dataPixelsCombXC.tsv', data[:,1:],fmt='%.6f',delimiter='\t',header=''.join(columnNames[1:]),comments='')
+    data, uniqueLabels, columnNames = getPixelValues.getGeneralSinglePixelValues(shapes, "D:/ITC/courseMaterial/module13GFM2/2015/code/STARS/processing/image", fieldname, inimgfrmt = ['.tif'], rastermask=treemask, subset=subsetcollection, returnsubset = False)
+    np.savetxt('D:/ITC/courseMaterial/module13GFM2/2015/code/STARS/processing/Skll/stars/train+dev/dataPixelsCombXC.tsv', data[:,1:],fmt='%.6f',delimiter='\t',header=''.join(columnNames[1:]),comments='')
 
     # |rowid,image1, image2,....,label|  ; in this case we have the ndvi heralick images
-    #data, uniqueLabels, columnNames = getPixelValues.getGeneralSinglePixelValues(shapes, "D:/ITC/courseMaterial/module13GFM2/2015/code/STARS/processing/haralik/NDI", fieldname, inimgfrmt = ['.tif'])
-    #np.savetxt('D:/ITC/courseMaterial/module13GFM2/2015/code/STARS/processing/Skll/stars/train+dev/dataPixelsCombXD.tsv', data[:,1:], fmt='%.6f', delimiter='\t',header= ''.join(columnNames[1:]), comments='')
+    data, uniqueLabels, columnNames = getPixelValues.getGeneralSinglePixelValues(shapes, "D:/ITC/courseMaterial/module13GFM2/2015/code/STARS/processing/haralik/NDI", fieldname, inimgfrmt = ['.tif'], rastermask=treemask, subset=subsetcollection, returnsubset = False)
+    np.savetxt('D:/ITC/courseMaterial/module13GFM2/2015/code/STARS/processing/Skll/stars/train+dev/dataPixelsCombXD.tsv', data[:,1:], fmt='%.6f', delimiter='\t',header= ''.join(columnNames[1:]), comments='')
 
+    ############    NDV charting    ##################
     # save NDVI table (band 7 is NIR, band 5 is R)
     # |polygonID, NDVI, labelcode| ; then use the table with the chartNDI.py script
-    #data, uniqueLabels,columnNames = getPixelValues.getSinglePixelValues(shapes, img, fieldname, bandcombination=True, combinations=[(7,5)])
-    #np.savetxt("NDVI.csv", np.hstack((data[:,0:1], data[:, -2:])), fmt='%.4f', delimiter=',')
+    data, uniqueLabels,columnNames = getPixelValues.getSinglePixelValues(shapes, img, fieldname,rastermask=treemask,combinations=[(7,5)],subset=None, returnsubset = False)
+    np.savetxt("NDVI.csv", np.hstack((data[:,0:1], data[:, -2:])), fmt='%.4f', delimiter=',')
 
 #### EXIT THE SCRIPT#####################################
 sys.exit(1)

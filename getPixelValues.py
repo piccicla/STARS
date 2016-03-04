@@ -27,9 +27,10 @@ gdal.UseExceptions()
 
 def getSinglePixelValues(shapes, inraster, fieldname,rastermask=None, combinations='*', subset=None, returnsubset = False):
     """intersect polygons/multipolygons with multiband rasters
-
+        IMPORTANT:
         polygons and raster must have the same coordinate system!!!
         feature falling partially or totally outside the raster will not be considered
+        when passing the subset as a dictionary be sure to use the same rastermask options used for the subset source
 
     :param shapes: polygons/multipolygons shapefile
     :param inraster: multiband raster
@@ -80,9 +81,11 @@ def getSinglePixelValues(shapes, inraster, fieldname,rastermask=None, combinatio
     elif type(subset) == dict and not type(next(iter(subset.values()))) == np.ndarray:
         raise ValueError('subset should be a dictionary of ndarrays')
 
-
+    if subset is None:
+        returnsubset = False
     if returnsubset:
-        returnsubset = {}
+        subsetcollection = {}
+
 
 
     raster = None
@@ -265,7 +268,7 @@ def getSinglePixelValues(shapes, inraster, fieldname,rastermask=None, combinatio
                     #print(idxsubsize.shape)
 
                     if returnsubset: #if we want to return the subset datastructure we need add a key:value
-                        returnsubset[int(polygonID[0,0])] = idxsubsize
+                        subsetcollection[int(polygonID[0,0])] = idxsubsize
 
                 else: #if the subset was a dictionary we extract the correct fancy indexer by key
                     #print(int(polygonID[0,0]))
@@ -362,7 +365,7 @@ def getSinglePixelValues(shapes, inraster, fieldname,rastermask=None, combinatio
 
         if returnsubset:
             if type(subset) == int:
-                return (outdata, uniqueLabels, columnNames, returnsubset)
+                return (outdata, uniqueLabels, columnNames, subsetcollection)
             else: #if the subset was already a datasturecture we just return it
                 return (outdata, uniqueLabels, columnNames, subset)
         return (outdata, uniqueLabels, columnNames)
@@ -378,13 +381,14 @@ def getSinglePixelValues(shapes, inraster, fieldname,rastermask=None, combinatio
         if outLayer: outLayer = None
         if outDataSet: outDataSet = None
 
-#TODO: test  subset logic
+
 def getGeneralSinglePixelValues(shapes, folderpath, fieldname, inimgfrmt = ['.tif'], rastermask=None, subset=None, returnsubset = False):
     """ general function to intersect polygons/multipolygons with a group of multiband rasters
         IMPORTANT
         polygons and raster must have the same coordinate system!!!
         the bands of a raster must have the same data type
         feature falling partially or totally outside the raster will not be considered
+        when passing the subset as a dictionary be sure to use the same rastermask options used for the subset source
 
     :param shapes: polygons/multipolygons shapefile
     :param folderpath: folder with multiband rasters
@@ -700,7 +704,7 @@ def getGeneralSinglePixelValues(shapes, folderpath, fieldname, inimgfrmt = ['.ti
         if band:
             band = None
 
-#TODO:  test combinations logic
+
 def getMeanPixelValues(shapes, inraster, fieldname, combinations ='*', nodatavalue=None):
     """intersect shapefile with multiband rasters
 

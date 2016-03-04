@@ -1,10 +1,6 @@
 add code in main.py to process multiple images; try with ipyparallel to allow local and cluster multiprocessing
 
-test rastermask and subset logic -> getPixelValues.getGeneralSinglePixelValues : I need to test it
-
-test rastermask logic and combinations logic -> getPixelValues.getMeanPixelValues
-
-test passing shuffling for subset polygons : test it
+recalculate heralick images with 10% subset
 
 try parallel computing for SKll
 
