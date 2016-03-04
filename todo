@@ -1,4 +1,4 @@
-add code in main.py to process multiple images; try with ipyparallel to allow local and cluster multiprocessing
+add code in main.py to process multiple images; use ipyparallel to allow local and cluster multiprocessing
 
 recalculate heralick images with 10% subset
 

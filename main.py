@@ -16,13 +16,66 @@
 # 4) add a CLASS field to the shapefile
 
 
+import settings
+###########################################################
+# Get values from the settings file
+
+
+
+import os
+# set working directory
+os.chdir(settings.working_directory)
+
+shapes = settings.shapes
+
+#img = r"raster.tif"
+img = settings.image
+
+treemask = settings.tree_mask
+
+# mean=True to get the average multiband pixel values inside polygons
+# mean=False to get all the multiband pixel values inside polygons
+MEAN = settings.mean
+nodatavalue = eval(settings.nodatavalue)
+
+band_combinations = settings.band_combinations
+if band_combinations != '*':
+    exec(band_combinations)
+pixel_subset = settings.pixel_subset
+NDI_chart_combinations = eval(settings.NDI_chart_combinations)
+
+hera_dir = settings.hera_dir
+heralick_format = eval(settings.heralick_format)
+hera_ndi_dir = settings.hera_ndi_dir
+heralick_ndi_format =  eval(settings.heralick_ndi_format)
+
+skll_dir = settings.skll_dir
+boruta_dir = settings.boruta_dir
+
+# shapefile field that contains the classes
+fieldname = settings.field_name
+
+# percentage of validation data
+percentage = settings.validation_data
+
+# classified raster name
+outname = settings.out_name
+
+# size of the tiles (columns, rows)
+tilesize =settings.tile_size
+
+#use ipyparallel
+parallelize = settings.parallelize
+
+
+
 # import modules
 
 # built-in modules
 import os
 import math
 import sys
-
+import time
 
 # 3rd-party modules
 from osgeo import gdal
@@ -41,50 +94,45 @@ import getPixelValues
 import tiledClassify
 import utility
 
-###########################################################
-# HARDCODED VALUES, CHANGE WIH YOUR VALUES!!!
 
-# set working directory
-os.chdir("D:/ITC/courseMaterial/module13GFM2/2015/code/STARS/processing")
+if parallelize:
+    print('kkkkkk')
+    from ipyparallel import Client
+    call = True
+    while call:
+        try:
+            print('waiting for ipcluster connection....')
+            client = Client(timeout=20)
+        except Exception as e:
+            print(e)
+            print('waiting other 5 seconds for ipcluster connection....')
+            time.sleep(5)
+        else:
+            print(client.ids)
+            if not client.ids:
+                print('nearly there, waiting 20 seconds for ipcluster connection....')
+                time.sleep(20)
+            if client.ids:
+                call = False
+    print("there are ", len(client.ids), "clients available")
 
-shapes = r"Mali_field_2014_smoothed_class_prj.shp"
 
-#img = r"raster.tif"
-img = r"ENVIraster.tif"
-treemask = r"Intensity_mask1.tif"
-
-# shapefile field that contains the classes
-fieldname = "CLASS"
-
-# percentage of validation data
-percentage = 25
-
-# classified raster name
-outname = "classify.tif"
-
-# size of the tiles (columns, rows)
-tilesize =(1024,1024)
-##########################################################
-
-# mean=True to get the average multiband pixel values inside polygons
-# mean=False to get all the multiband pixel values inside polygons
-MEAN = False
+sys.exit()
 
 ##########################################################
 
 ogr.UseExceptions()
 gdal.UseExceptions()
 
-
 # prepare supervised data and output it to the skll folder
 if MEAN:
-    data, uniqueLabels, columnNames = getPixelValues.getMeanPixelValues(shapes, img, fieldname, nodatavalue=-999.0,combinations=[])
+    data, uniqueLabels, columnNames = getPixelValues.getMeanPixelValues(shapes, img, fieldname, nodatavalue=nodatavalue,combinations=band_combinations)
     # output data to skll folder, we don't export the polygonID
     np.savetxt("dataMeanComb.tsv", data[:, 1:], fmt="%.4f", delimiter="\t", header="".join(columnNames[1:]),comments="")
 
 else:
 
-    data, uniqueLabels,columnNames,subsetcollection = getPixelValues.getSinglePixelValues(shapes, img, fieldname,rastermask=treemask,combinations='*',subset=10, returnsubset=True)
+    data, uniqueLabels,columnNames,subsetcollection = getPixelValues.getSinglePixelValues(shapes, img, fieldname,rastermask=treemask,combinations=band_combinations,subset=pixel_subset, returnsubset=True)
 
     #output data to skll, we don't export the polygonID   |rowid,band1, band2,..., 1-2, 1-3,....,label|
     # the first row will contain the field names
@@ -104,24 +152,24 @@ else:
     ############    SKLL    ####################
     # |rowid,band1, band2,,....,label|
     #np.savetxt(r'D:\ITC\courseMaterial\module13GFM2\2015\code\STARS\processing\Skll\stars\train+dev\dataPixelsCombXA.tsv', np.hstack((data[:,1:10],data[:,-1:])), fmt='%.6f', delimiter='\t',header= ''.join(columnNames[1:10]+columnNames[-1:]), comments='')
-    np.savetxt(r'D:\ITC\courseMaterial\module13GFM2\2015\code\STARS\processing\Skll\stars\train+dev\ENVIdataPixelsCombXA.tsv', np.hstack((data[:,1:10],data[:,-1:])), fmt='%.6f', delimiter='\t',header= ''.join(columnNames[1:10]+columnNames[-1:]), comments='')
+    np.savetxt(skll_dir + "/ENVIdataPixelsCombXA.tsv", np.hstack((data[:,1:10],data[:,-1:])), fmt='%.6f', delimiter='\t',header= ''.join(columnNames[1:10]+columnNames[-1:]), comments='')
 
     # |rowid,1-2, 1-3,....,label|
     #np.savetxt(r'D:\ITC\courseMaterial\module13GFM2\2015\code\STARS\processing\Skll\stars\train+dev\dataPixelsCombXB.tsv', np.hstack((data[:,1:2],data[:,10:] )), fmt='%.6f', delimiter='\t',header= ''.join(columnNames[1:2]+columnNames[10:]), comments='')
-    np.savetxt(r'D:\ITC\courseMaterial\module13GFM2\2015\code\STARS\processing\Skll\stars\train+dev\ENVIdataPixelsCombXB.tsv', np.hstack((data[:,1:2],data[:,10:] )), fmt='%.6f', delimiter='\t',header= ''.join(columnNames[1:2]+columnNames[10:]), comments='')
+    np.savetxt(skll_dir + "/ENVIdataPixelsCombXB.tsv", np.hstack((data[:,1:2],data[:,10:] )), fmt='%.6f', delimiter='\t',header= ''.join(columnNames[1:2]+columnNames[10:]), comments='')
 
     # |rowid,image1, image2,....,label|  ; in this case we have the heralick images
-    data, uniqueLabels, columnNames = getPixelValues.getGeneralSinglePixelValues(shapes, "D:/ITC/courseMaterial/module13GFM2/2015/code/STARS/processing/image", fieldname, inimgfrmt = ['.tif'], rastermask=treemask, subset=subsetcollection, returnsubset = False)
-    np.savetxt('D:/ITC/courseMaterial/module13GFM2/2015/code/STARS/processing/Skll/stars/train+dev/dataPixelsCombXC.tsv', data[:,1:],fmt='%.6f',delimiter='\t',header=''.join(columnNames[1:]),comments='')
+    data, uniqueLabels, columnNames = getPixelValues.getGeneralSinglePixelValues(shapes, hera_dir, fieldname, inimgfrmt = heralick_format, rastermask=treemask, subset=subsetcollection, returnsubset = False)
+    np.savetxt(skll_dir + "/dataPixelsCombXC.tsv", data[:,1:],fmt='%.6f',delimiter='\t',header=''.join(columnNames[1:]),comments='')
 
     # |rowid,image1, image2,....,label|  ; in this case we have the ndvi heralick images
-    data, uniqueLabels, columnNames = getPixelValues.getGeneralSinglePixelValues(shapes, "D:/ITC/courseMaterial/module13GFM2/2015/code/STARS/processing/haralik/NDI", fieldname, inimgfrmt = ['.tif'], rastermask=treemask, subset=subsetcollection, returnsubset = False)
-    np.savetxt('D:/ITC/courseMaterial/module13GFM2/2015/code/STARS/processing/Skll/stars/train+dev/dataPixelsCombXD.tsv', data[:,1:], fmt='%.6f', delimiter='\t',header= ''.join(columnNames[1:]), comments='')
+    data, uniqueLabels, columnNames = getPixelValues.getGeneralSinglePixelValues(shapes, hera_ndi_dir, fieldname, inimgfrmt = heralick_ndi_format, rastermask=treemask, subset=subsetcollection, returnsubset = False)
+    np.savetxt(skll_dir + "/dataPixelsCombXD.tsv", data[:,1:], fmt='%.6f', delimiter='\t',header= ''.join(columnNames[1:]), comments='')
 
     ############    NDV charting    ##################
     # save NDVI table (band 7 is NIR, band 5 is R)
     # |polygonID, NDVI, labelcode| ; then use the table with the chartNDI.py script
-    data, uniqueLabels,columnNames = getPixelValues.getSinglePixelValues(shapes, img, fieldname,rastermask=treemask,combinations=[(7,5)],subset=None, returnsubset = False)
+    data, uniqueLabels,columnNames = getPixelValues.getSinglePixelValues(shapes, img, fieldname,rastermask=treemask,combinations=NDI_chart_combinations,subset=None, returnsubset = False)
     np.savetxt("NDVI.csv", np.hstack((data[:,0:1], data[:, -2:])), fmt='%.4f', delimiter=',')
 
 #### EXIT THE SCRIPT#####################################
@@ -193,4 +241,4 @@ if MEAN:
 
 
 # classify image using tiles
-tiledClassify.tiledClassification( img,rf, tilesize = tilesize, outname=outname)
+tiledClassify.tiledClassification( img,rf, tilesize = (tilesize,tilesize), outname=outname)
