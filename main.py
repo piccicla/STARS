@@ -20,83 +20,170 @@ import settings
 ###########################################################
 # Get values from the settings file
 
+setng={}
 
+setng['working_directory'] = working_directory = settings.working_directory
+#os.chdir(settings.working_directory)
 
-import os
-# set working directory
-os.chdir(settings.working_directory)
-
-shapes = settings.shapes
+setng['shapes'] = shapes = settings.shapes
 
 #img = r"raster.tif"
-img = settings.image
+setng['img'] = img = settings.image
 
-treemask = settings.tree_mask
+setng['treemask'] = treemask = settings.tree_mask
 
 # mean=True to get the average multiband pixel values inside polygons
 # mean=False to get all the multiband pixel values inside polygons
-MEAN = settings.mean
-nodatavalue = eval(settings.nodatavalue)
+setng['MEAN'] = MEAN = settings.mean
+setng['nodatavalue'] = nodatavalue = eval(settings.nodatavalue)
 
 band_combinations = settings.band_combinations
 if band_combinations != '*':
     exec(band_combinations)
-pixel_subset = settings.pixel_subset
-NDI_chart_combinations = eval(settings.NDI_chart_combinations)
+setng['band_combinations'] = band_combinations
+setng['pixel_subset'] = pixel_subset = settings.pixel_subset
+setng['NDI_chart_combinations'] = NDI_chart_combinations = eval(settings.NDI_chart_combinations)
 
-hera_dir = settings.hera_dir
-heralick_format = eval(settings.heralick_format)
-hera_ndi_dir = settings.hera_ndi_dir
-heralick_ndi_format =  eval(settings.heralick_ndi_format)
+setng['hera_dir'] = hera_dir = settings.hera_dir
+setng['heralick_format'] = heralick_format = eval(settings.heralick_format)
+setng['hera_ndi_dir'] = hera_ndi_dir = settings.hera_ndi_dir
+setng['heralick_ndi_format'] = heralick_ndi_format =  eval(settings.heralick_ndi_format)
 
-skll_dir = settings.skll_dir
-boruta_dir = settings.boruta_dir
+setng['skll_dir'] = skll_dir = settings.skll_dir
+setng['boruta_dir'] = boruta_dir = settings.boruta_dir
 
 # shapefile field that contains the classes
-fieldname = settings.field_name
+setng['fieldname'] = fieldname = settings.field_name
 
 # percentage of validation data
-percentage = settings.validation_data
+setng['percentage'] = percentage = settings.validation_data
 
 # classified raster name
-outname = settings.out_name
+setng['outname'] = outname = settings.out_name
 
 # size of the tiles (columns, rows)
-tilesize =settings.tile_size
+setng['tilesize'] = tilesize =settings.tile_size
 
 #use ipyparallel
-parallelize = settings.parallelize
+setng['parallelize'] = parallelize = settings.parallelize
 
-
+setng['engine_messages'] = engine_messages =  settings.engine_messages
 
 # import modules
 
 # built-in modules
 import os
-import math
+#import math
 import sys
 import time
 
-# 3rd-party modules
-from osgeo import gdal
-from osgeo import ogr
-import rasterstats
-import numpy as np
-import matplotlib.pyplot as plt
 
-from sklearn.ensemble import RandomForestClassifier
-from sklearn import metrics
+#import matplotlib.pyplot as plt
+#from sklearn.ensemble import RandomForestClassifier
+#from sklearn import metrics
+
+# 3rd-party modules
+#import numpy as np
 
 # custom modules
-import fileIO
-import visualization
-import getPixelValues
-import tiledClassify
-import utility
+#import fileIO
+#import visualization
+#import getPixelValues
+#import tiledClassify
+#import utility
 
+
+#########################
+
+
+def preparedata(image):
+
+    import os
+    import numpy as np
+    import getPixelValues
+    os.chdir(working_directory)
+
+
+
+    # prepare supervised data and output it to the skll folder
+    if MEAN:
+        data, uniqueLabels, columnNames = getPixelValues.getMeanPixelValues(shapes, img, fieldname, nodatavalue=nodatavalue,combinations=band_combinations)
+        # output data to skll folder, we don't export the polygonID
+        np.savetxt( image + "_dataMeanComb.tsv", data[:, 1:], fmt="%.4f", delimiter="\t", header="".join(columnNames[1:]),comments="")
+
+        return True
+
+    else:
+
+        data, uniqueLabels,columnNames,subsetcollection = getPixelValues.getSinglePixelValues(shapes, img, fieldname,rastermask=treemask,combinations=band_combinations,subset=pixel_subset, returnsubset=True)
+
+        #output data to skll, we don't export the polygonID   |rowid,band1, band2,..., 1-2, 1-3,....,label|
+        # the first row will contain the field names
+        np.savetxt(image + '_dataPixelsComb.tsv', data[:,1:], fmt='%.4f', delimiter='\t', header= ''.join(columnNames[1:]), comments='')
+
+        #############   BORUTA  #####################
+        # there is no header the field names  |band1, band2,..., 1-2, 1-3,....|
+        #np.savetxt('dataPixelsCombX.csv', data[:,2:-1], fmt='%.4f', delimiter=',')
+        np.savetxt(image + '_dataPixelsCombX.csv', data[:,2:-1], fmt='%.4f', delimiter=',')
+        # there is no header with the field names  |polyID, rowid,band1, band2,..., 1-2, 1-3,....|
+        #np.savetxt('dataPixelsCombX+IDS.csv', data[:,:-1], fmt='%.4f', delimiter=',')
+        np.savetxt(image + '_dataPixelsCombX+IDS.csv', data[:,:-1], fmt='%.4f', delimiter=',')
+        # there is no header with the field names  |label|
+        #np.savetxt('dataPixelsCombY.csv', data[:,-1:], fmt='%.1f', delimiter=',')
+        np.savetxt(image + '_dataPixelsCombY.csv', data[:,-1:], fmt='%.1f', delimiter=',')
+
+        ############    SKLL    ####################
+        # |rowid,band1, band2,,....,label|
+        #np.savetxt(r'D:\ITC\courseMaterial\module13GFM2\2015\code\STARS\processing\Skll\stars\train+dev\dataPixelsCombXA.tsv', np.hstack((data[:,1:10],data[:,-1:])), fmt='%.6f', delimiter='\t',header= ''.join(columnNames[1:10]+columnNames[-1:]), comments='')
+        np.savetxt(skll_dir + "/"+image+"_dataPixelsCombXA.tsv", np.hstack((data[:,1:10],data[:,-1:])), fmt='%.6f', delimiter='\t',header= ''.join(columnNames[1:10]+columnNames[-1:]), comments='')
+
+        # |rowid,1-2, 1-3,....,label|
+        #np.savetxt(r'D:\ITC\courseMaterial\module13GFM2\2015\code\STARS\processing\Skll\stars\train+dev\dataPixelsCombXB.tsv', np.hstack((data[:,1:2],data[:,10:] )), fmt='%.6f', delimiter='\t',header= ''.join(columnNames[1:2]+columnNames[10:]), comments='')
+        np.savetxt(skll_dir + "/"+image+"_dataPixelsCombXB.tsv", np.hstack((data[:,1:2],data[:,10:] )), fmt='%.6f', delimiter='\t',header= ''.join(columnNames[1:2]+columnNames[10:]), comments='')
+
+        # |rowid,image1, image2,....,label|  ; in this case we have the heralick images
+        data, uniqueLabels, columnNames = getPixelValues.getGeneralSinglePixelValues(shapes, hera_dir, fieldname, inimgfrmt = heralick_format, rastermask=treemask, subset=subsetcollection, returnsubset = False)
+        np.savetxt(skll_dir + "/"+image+"_PixelsCombXC.tsv", data[:,1:],fmt='%.6f',delimiter='\t',header=''.join(columnNames[1:]),comments='')
+
+        # |rowid,image1, image2,....,label|  ; in this case we have the ndvi heralick images
+        data, uniqueLabels, columnNames = getPixelValues.getGeneralSinglePixelValues(shapes, hera_ndi_dir, fieldname, inimgfrmt = heralick_ndi_format, rastermask=treemask, subset=subsetcollection, returnsubset = False)
+        np.savetxt(skll_dir + "/"+image+"_PixelsCombXD.tsv", data[:,1:], fmt='%.6f', delimiter='\t',header= ''.join(columnNames[1:]), comments='')
+
+        ############    NDV charting    ##################
+        # save NDVI table (band 7 is NIR, band 5 is R)
+        # |polygonID, NDVI, labelcode| ; then use the table with the chartNDI.py script
+        data, uniqueLabels,columnNames = getPixelValues.getSinglePixelValues(shapes, img, fieldname,rastermask=treemask,combinations=NDI_chart_combinations,subset=None, returnsubset = False)
+        np.savetxt(image+"_NDVI.csv", np.hstack((data[:,0:1], data[:, -2:])), fmt='%.4f', delimiter=',')
+
+        return True
+
+###########################
+
+def wait_watching_stdout(ar, dt=0.1, truncate=500):
+    while not ar.ready():
+        stdouts = ar.stdout
+        #print(ar.stdout)
+        if not stdouts:
+            continue
+        print('-' * 30)
+        print ("%.3fs elapsed" % ar.elapsed)
+        print ("")
+        for stdout in stdouts:
+            if stdout:
+                print("processing OK")
+                #print ("[ stdout %s ]" %  stdout[-truncate:])
+        sys.stdout.flush()
+        time.sleep(dt)
+    else:
+        #print complete messages
+        for stdout in stdouts:
+            if stdout:
+                print ("[ stdout %s ]" %  stdout[-truncate:])
+        sys.stdout.flush()
+        print(ar.get())
+        print("finished!")
 
 if parallelize:
-    print('kkkkkk')
     from ipyparallel import Client
     call = True
     while call:
@@ -116,63 +203,40 @@ if parallelize:
                 call = False
     print("there are ", len(client.ids), "clients available")
 
+    #creating a direct view
+    dview = client[:]
 
-sys.exit()
+    #pushing configuations to the workers
+    for k in setng:
+        dview[k]=setng[k]
 
-##########################################################
+    #updating the sys.path, this is necessary, this is necessary for the engines to find the custom modules
+    mydir = os.path.dirname(os.path.abspath(__file__))
+    dview["mydir"]=mydir
+    dview.execute("import sys")
+    dview.execute("sys.path.append(mydir)")
 
-ogr.UseExceptions()
-gdal.UseExceptions()
 
-# prepare supervised data and output it to the skll folder
-if MEAN:
-    data, uniqueLabels, columnNames = getPixelValues.getMeanPixelValues(shapes, img, fieldname, nodatavalue=nodatavalue,combinations=band_combinations)
-    # output data to skll folder, we don't export the polygonID
-    np.savetxt("dataMeanComb.tsv", data[:, 1:], fmt="%.4f", delimiter="\t", header="".join(columnNames[1:]),comments="")
+    #calling a function asyncronously on all engines
+    ar = dview.map_async(preparedata, ['image1','image2'])
+    #do we want the engine stdout
+    if engine_messages:
+        wait_watching_stdout(ar)
+    else:
+        ar.wait()
+        print(ar.get())
+        print("finished!")
+
+
+    #dview.execute('sys.exit()')
 
 else:
 
-    data, uniqueLabels,columnNames,subsetcollection = getPixelValues.getSinglePixelValues(shapes, img, fieldname,rastermask=treemask,combinations=band_combinations,subset=pixel_subset, returnsubset=True)
+    for i in ['image1','image2']:
+        preparedata(i)
 
-    #output data to skll, we don't export the polygonID   |rowid,band1, band2,..., 1-2, 1-3,....,label|
-    # the first row will contain the field names
-    np.savetxt('ENVIdataPixelsComb.tsv', data[:,1:], fmt='%.4f', delimiter='\t', header= ''.join(columnNames[1:]), comments='')
 
-    #############   BORUTA  #####################
-    # there is no header the field names  |band1, band2,..., 1-2, 1-3,....|
-    #np.savetxt('dataPixelsCombX.csv', data[:,2:-1], fmt='%.4f', delimiter=',')
-    np.savetxt('ENVIdataPixelsCombX.csv', data[:,2:-1], fmt='%.4f', delimiter=',')
-    # there is no header with the field names  |polyID, rowid,band1, band2,..., 1-2, 1-3,....|
-    #np.savetxt('dataPixelsCombX+IDS.csv', data[:,:-1], fmt='%.4f', delimiter=',')
-    np.savetxt('ENVIdataPixelsCombX+IDS.csv', data[:,:-1], fmt='%.4f', delimiter=',')
-    # there is no header with the field names  |label|
-    #np.savetxt('dataPixelsCombY.csv', data[:,-1:], fmt='%.1f', delimiter=',')
-    np.savetxt('ENVIdataPixelsCombY.csv', data[:,-1:], fmt='%.1f', delimiter=',')
-
-    ############    SKLL    ####################
-    # |rowid,band1, band2,,....,label|
-    #np.savetxt(r'D:\ITC\courseMaterial\module13GFM2\2015\code\STARS\processing\Skll\stars\train+dev\dataPixelsCombXA.tsv', np.hstack((data[:,1:10],data[:,-1:])), fmt='%.6f', delimiter='\t',header= ''.join(columnNames[1:10]+columnNames[-1:]), comments='')
-    np.savetxt(skll_dir + "/ENVIdataPixelsCombXA.tsv", np.hstack((data[:,1:10],data[:,-1:])), fmt='%.6f', delimiter='\t',header= ''.join(columnNames[1:10]+columnNames[-1:]), comments='')
-
-    # |rowid,1-2, 1-3,....,label|
-    #np.savetxt(r'D:\ITC\courseMaterial\module13GFM2\2015\code\STARS\processing\Skll\stars\train+dev\dataPixelsCombXB.tsv', np.hstack((data[:,1:2],data[:,10:] )), fmt='%.6f', delimiter='\t',header= ''.join(columnNames[1:2]+columnNames[10:]), comments='')
-    np.savetxt(skll_dir + "/ENVIdataPixelsCombXB.tsv", np.hstack((data[:,1:2],data[:,10:] )), fmt='%.6f', delimiter='\t',header= ''.join(columnNames[1:2]+columnNames[10:]), comments='')
-
-    # |rowid,image1, image2,....,label|  ; in this case we have the heralick images
-    data, uniqueLabels, columnNames = getPixelValues.getGeneralSinglePixelValues(shapes, hera_dir, fieldname, inimgfrmt = heralick_format, rastermask=treemask, subset=subsetcollection, returnsubset = False)
-    np.savetxt(skll_dir + "/dataPixelsCombXC.tsv", data[:,1:],fmt='%.6f',delimiter='\t',header=''.join(columnNames[1:]),comments='')
-
-    # |rowid,image1, image2,....,label|  ; in this case we have the ndvi heralick images
-    data, uniqueLabels, columnNames = getPixelValues.getGeneralSinglePixelValues(shapes, hera_ndi_dir, fieldname, inimgfrmt = heralick_ndi_format, rastermask=treemask, subset=subsetcollection, returnsubset = False)
-    np.savetxt(skll_dir + "/dataPixelsCombXD.tsv", data[:,1:], fmt='%.6f', delimiter='\t',header= ''.join(columnNames[1:]), comments='')
-
-    ############    NDV charting    ##################
-    # save NDVI table (band 7 is NIR, band 5 is R)
-    # |polygonID, NDVI, labelcode| ; then use the table with the chartNDI.py script
-    data, uniqueLabels,columnNames = getPixelValues.getSinglePixelValues(shapes, img, fieldname,rastermask=treemask,combinations=NDI_chart_combinations,subset=None, returnsubset = False)
-    np.savetxt("NDVI.csv", np.hstack((data[:,0:1], data[:, -2:])), fmt='%.4f', delimiter=',')
-
-#### EXIT THE SCRIPT#####################################
+#### FOR NOW EXIT THE SCRIPT#####################################
 sys.exit(1)
 ##########################################################
 
@@ -237,7 +301,6 @@ if MEAN:
         plt.subplot(math.floor(len(uniqueLabels)/2), len(uniqueLabels) - math.floor(len(uniqueLabels)/2), i+1)
         plt.plot(np.arange(1, data.shape[1]), trainingSamples[trainingLabels == i+1, :].T)
     plt.show()
-
 
 
 # classify image using tiles

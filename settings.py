@@ -65,6 +65,7 @@ tile_size = classification.getint("tile_size", 1024)
 
 ipyparallel = parser['ipyparallel']
 parallelize = ipyparallel.getboolean('parallelize', False)
+engine_messages = ipyparallel.getboolean('engine_messages', False)
 
 
 
