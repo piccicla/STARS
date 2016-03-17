@@ -24,7 +24,8 @@
 #                    - Rescale image (need orfeo installed)
 #                    - execute an external executable file
 #                    - execute an external python script
-#                    - Get min max values from an image band 
+#                    - Get min max values from an image band
+#                    - filter files by extension name
 #
 # Author:      Claudio Piccinini; Chris Garrard
 #
@@ -34,6 +35,7 @@
 import sys
 import math
 import codecs
+import os
 
 import numpy as np
 import osgeo #this is necessary for the type comparison in some methods
@@ -746,6 +748,25 @@ def get_minmax(imagepath, band = 1 ):
     finally:
         if d:
             d = None
+
+
+
+def filter_files(basepath, filter):
+    """ filter files by extension name and return of list of names
+    :param path: tha path to the folder
+    :param filter: a list with the file extensions   e.g. ['.tif']
+    :return: a list of file names
+    """
+    # get the content of the images directory
+    f = os.listdir(basepath)
+    a = []
+    # iterate all the files and keep only the ones with the correct extension
+    for i in f:
+        # filter content, we want files with the correct extension
+        if os.path.isfile(basepath+'/'+i) and (os.path.splitext(basepath+'/'+i)[-1] in filter):
+            a.append(i)
+    return a
+
 
 _geom_constants = {}
 _ignore = ["wkb25DBit", "wkb25Bit", "wkbXDR", "wkbNDR"]

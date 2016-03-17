@@ -7,23 +7,22 @@ else:
     print('python version 2 or 3 are required')
     sys.exit()
 
+import json
+import utility
+
+#################### parsing the main.ini ##########################
+
+
 parser = parser()
 parser.read("./settings/main.ini")
 
 #print(parser.sections())
 
-
 indata = parser['indata']
 working_directory = indata.get("working_directory",".")
-shapes = indata.get("shapes","")
-if not shapes: raise ValueError("input shapes are mandatory")
+
 field_name = indata.get("field_name","")
 if not field_name: raise ValueError("input field_name is mandatory")
-image = indata.get( "image","")
-if not image: raise ValueError("input image is mandatory")
-tree_mask = indata.get("tree_mask","")
-if not tree_mask: tree_mask = None
-
 
 data_extraction = parser['data_extraction']
 mean = data_extraction.getboolean("mean", False)
@@ -38,15 +37,19 @@ NDI_chart_combinations = data_extraction.get("NDI_chart_combinations" , "[(7,5)]
 #the nodatavalue to assign when polygons falls outside the raster (this works when mean == True)
 nodatavalue =  data_extraction.get("nodatavalue", None)
 
-heralick = parser['heralick']
+haralick = parser['haralick']
 #folder tha will contain the input image for heralick
-hera_dir = heralick.get("hera_dir","." )
+hara_dir = haralick.get("hara_dir","." )
 # heralick image suffix format (comma separated list)
-heralick_format = heralick.get("heralick_format","tif")
+haralick_format = haralick.get("haralick_format","tif")
+#simple, advanced, higher?
+haralick_image_type = haralick.get("haralick_image_type","simple")
 #folder tha will contain the input ndi images for heralick
-hera_ndi_dir =  heralick.get("hera_ndi_dir" ,"." )
+hara_ndi_dir =  haralick.get("hara_ndi_dir" ,"." )
 # heralick ndi image suffix format (comma separated list)
-heralick_ndi_format =heralick.get("heralick_ndi_format" , "tif")
+haralick_ndi_format =haralick.get("haralick_ndi_format" , "tif")
+#simple, advanced, higher?
+haralick_ndi_type = haralick.get("haralick_ndi_type","simple")
 
 skll = parser['skll']
 skll_dir = skll.get("skll_dir","." )
@@ -67,15 +70,113 @@ ipyparallel = parser['ipyparallel']
 parallelize = ipyparallel.getboolean('parallelize', False)
 engine_messages = ipyparallel.getboolean('engine_messages', False)
 
+############# parsing the paths.json #########################
+
+
+def extract_haralick_images(tag0, tag1, tag2 ):
+    """ fill in the dictionary with paths for haralick images
+    :param tag0: "haralick_images" or "haralick_ndi"
+    :param tag1: object y
+    :param tag2: object image
+    :return:
+    """
+
+
+    tag1[tag0] = {}
+    tag1[tag0]["simple"] = {}
+    tag1[tag0]["advanced"] = {}
+    tag1[tag0]["higher"] = {}
+
+    for n,haralick_images in enumerate(tag2[tag0]):
+
+        if haralick_images["type"]== "folder":
+
+            if haralick_images["name"]== "simple":
+                x = tag1[tag0]["simple"]
+                basepath = haralick_images["basepath"] + "/" + haralick_images["name"]
+                x["basepath"] = basepath
+                x["images"] = []
+
+                #get all the haralick images in the folder
+                x["images"] += utility.filter_files(basepath,haralick_images["formats"])
+
+            elif haralick_images["name"]== "advanced":
+                x = tag1[tag0]["advanced"]
+                basepath = haralick_images["basepath"] + "/" + haralick_images["name"]
+                x["basepath"] = basepath
+                x["images"] = []
+                #get all the haralick images in the folder
+                x["images"] += utility.filter_files(basepath,haralick_images["formats"])
+
+            elif haralick_images["name"]== "higher":
+                x = tag1[tag0]["higher"]
+                basepath = haralick_images["basepath"] + "/" + haralick_images["name"]
+                x["basepath"] = basepath
+                x["images"] = []
+                #get all the haralick images in the folder
+                x["images"] += utility.filter_files(basepath,haralick_images["formats"])
+
+            else:
+                raise ValueError("haralick image name can be  - simple advanced higher - ")
+
+        else:
+            raise NotImplementedError("only folders are possible")
+
+
+f= open("./settings/paths.json")
+j=json.load(f)
+
+#here we initilize the data structure
+
+paths = {}
+
+#iterate all the satellite images
+for i,im in enumerate(j["images"]):
+
+    paths[i] = {}
+
+    print("this is image ",i)
+    image = im["image"]
+    print(image["type"])
+
+    if image["type"] == "folder":
+
+        paths[i]["type"] = image["type"]
+        paths[i]["name"] = image["name"]
+        paths[i]["basepath"] = image["basepath"] + "/" + image["name"]
+
+        paths[i]["content"] = []
+
+        for n,content in enumerate(image["content"]):
+            paths[i]["content"].append({})
+            paths[i]["content"][n]["raster"] = content["raster"]
+            paths[i]["content"][n]["shape"] = content["shapes"]
+            paths[i]["content"][n]["mask"] = content.get("mask", None)
+
+        y = paths[i]
+        #y["haralick_images"] = {}
+        #y["haralick_images"]["simple"] = {}
+        #y["haralick_images"]["advanced"] = {}
+        #y["haralick_images"]["higher"] = {}
+
+        extract_haralick_images(tag0="haralick_images", tag1=y, tag2=image)
+
+        y = paths[i]
+
+        extract_haralick_images(tag0="haralick_ndi", tag1=y, tag2=image)
+
+    else:
+        raise NotImplementedError("only folders are possible")
+
 
 
 if __name__ == "__main__":
 
     print("working_directory:" ,working_directory)
-    print("shapes:"  ,shapes)
+    #print("shapes:"  ,shapes)
     print("field_name:" ,field_name)
-    print("image:" ,image)
-    print("tree_mask:" ,tree_mask)
+    #print("image:" ,image)
+    #print("tree_mask:" ,tree_mask)
 
     print()
     print("mean:" ,mean)
@@ -84,10 +185,13 @@ if __name__ == "__main__":
     print("NDI_chart_combinations:" ,NDI_chart_combinations)
 
     print()
-    print("hera_dir:" ,hera_dir)
-    print("heralick_format:" ,heralick_format)
-    print("hera_ndi_dir:" ,hera_ndi_dir)
-    print("heralick_ndi_format:" ,heralick_ndi_format)
+    print("hara_dir:" ,hara_dir)
+    print("haralick_format:" ,haralick_format)
+    print("haralick_image_type:" ,haralick_image_type)
+    print("hara_ndi_dir:" ,hara_ndi_dir)
+    print("haralick_ndi_format:" ,haralick_ndi_format)
+    print("haralick_ndi_type:" ,haralick_ndi_type)
+
     print()
     print("skll_dir:" ,skll_dir)
     print()
@@ -98,3 +202,6 @@ if __name__ == "__main__":
     print("tile_size:" ,tile_size)
     print()
     print("parallelize:" ,parallelize)
+    print("#####################")
+    print(paths)
+

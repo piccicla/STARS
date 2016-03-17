@@ -461,7 +461,7 @@ def getGeneralSinglePixelValues(shapes, folderpath, fieldname, inimgfrmt = ['.ti
         columnNames = []
         labels = []  #this will store all the labels
 
-        # iterate all the images
+        # iterate all the files and keep only the ones with the correct extension
         for i in imgs:
             # filter content, we want files with the correct extension
             if os.path.isfile(folderpath+'/'+i) and (os.path.splitext(folderpath+'/'+i)[-1] in inimgfrmt) :

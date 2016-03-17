@@ -25,12 +25,10 @@ setng={}
 setng['working_directory'] = working_directory = settings.working_directory
 #os.chdir(settings.working_directory)
 
-setng['shapes'] = shapes = settings.shapes
-
+####setng['shapes'] = shapes = settings.shapes
 #img = r"raster.tif"
-setng['img'] = img = settings.image
-
-setng['treemask'] = treemask = settings.tree_mask
+####setng['img'] = img = settings.image
+#####setng['treemask'] = treemask = settings.tree_mask
 
 # mean=True to get the average multiband pixel values inside polygons
 # mean=False to get all the multiband pixel values inside polygons
@@ -44,10 +42,12 @@ setng['band_combinations'] = band_combinations
 setng['pixel_subset'] = pixel_subset = settings.pixel_subset
 setng['NDI_chart_combinations'] = NDI_chart_combinations = eval(settings.NDI_chart_combinations)
 
-setng['hera_dir'] = hera_dir = settings.hera_dir
-setng['heralick_format'] = heralick_format = eval(settings.heralick_format)
-setng['hera_ndi_dir'] = hera_ndi_dir = settings.hera_ndi_dir
-setng['heralick_ndi_format'] = heralick_ndi_format =  eval(settings.heralick_ndi_format)
+setng['hara_dir'] = hara_dir = settings.hara_dir
+setng['haralick_format'] = haralick_format = eval(settings.haralick_format)
+setng['haralick_image_type'] = haralick_image_type =  eval(settings.haralick_image_type)
+setng['hara_ndi_dir'] = hara_ndi_dir = settings.hara_ndi_dir
+setng['haralick_ndi_format'] = haralick_ndi_format =  eval(settings.haralick_ndi_format)
+setng['heralick_ndi_type'] = haralick_ndi_type =  eval(settings.haralick_ndi_type)
 
 setng['skll_dir'] = skll_dir = settings.skll_dir
 setng['boruta_dir'] = boruta_dir = settings.boruta_dir
@@ -68,6 +68,11 @@ setng['tilesize'] = tilesize =settings.tile_size
 setng['parallelize'] = parallelize = settings.parallelize
 
 setng['engine_messages'] = engine_messages =  settings.engine_messages
+
+
+paths = settings.paths
+
+
 
 # import modules
 
@@ -96,20 +101,35 @@ import time
 #########################
 
 
-def preparedata(image):
+def preparedata(imagetag):
 
     import os
     import numpy as np
     import getPixelValues
-    os.chdir(working_directory)
+
+
+    d = paths[imagetag]
+
+    ##os.chdir(working_directory)
+
 
 
 
     # prepare supervised data and output it to the skll folder
     if MEAN:
-        data, uniqueLabels, columnNames = getPixelValues.getMeanPixelValues(shapes, img, fieldname, nodatavalue=nodatavalue,combinations=band_combinations)
-        # output data to skll folder, we don't export the polygonID
-        np.savetxt( image + "_dataMeanComb.tsv", data[:, 1:], fmt="%.4f", delimiter="\t", header="".join(columnNames[1:]),comments="")
+        #first we go to the directory that stores the images
+        os.chdir(d['basepath'])
+
+        #for the same image we can have different shapes and masks
+        for n, comb in enumerate(d['content']):
+
+            data, uniqueLabels, columnNames = getPixelValues.getMeanPixelValues(comb['shape'], comb['raster'], fieldname, nodatavalue=nodatavalue, combinations=band_combinations)
+            # output data to skll folder, we don't export the polygonID
+
+            if not os.path.exists(skll_dir+"/"+d['name']):
+                os.mkdir(skll_dir+"/"+d['name'])
+
+            np.savetxt(skll_dir+"/"+d['name'] + "/" + str(n)+ "_dataMeanComb.tsv", data[:, 1:], fmt="%.4f", delimiter="\t", header="".join(columnNames[1:]),comments="")
 
         return True
 
@@ -184,6 +204,7 @@ def wait_watching_stdout(ar, dt=0.1, truncate=500):
         print("finished!")
 
 if parallelize:
+    T0 = time.perf_counter()
     from ipyparallel import Client
     call = True
     while call:
@@ -213,12 +234,13 @@ if parallelize:
     #updating the sys.path, this is necessary, this is necessary for the engines to find the custom modules
     mydir = os.path.dirname(os.path.abspath(__file__))
     dview["mydir"]=mydir
+    dview["paths"]=paths
     dview.execute("import sys")
     dview.execute("sys.path.append(mydir)")
 
 
-    #calling a function asyncronously on all engines
-    ar = dview.map_async(preparedata, ['image1','image2'])
+    #calling a function asyncronously on all engines, each image in paths is assigned to one engine
+    ar = dview.map_async(preparedata, list(paths.keys()))
     #do we want the engine stdout
     if engine_messages:
         wait_watching_stdout(ar)
@@ -227,14 +249,17 @@ if parallelize:
         print(ar.get())
         print("finished!")
 
+    T1 = time.perf_counter()
+    print("parallel elapsed: ",(T1 - T0)*1000)
 
     #dview.execute('sys.exit()')
 
 else:
-
-    for i in ['image1','image2']:
+    T0 = time.perf_counter()
+    for i in  list(paths.keys()):
         preparedata(i)
-
+    T1 = time.perf_counter()
+    print("sequential elapsed: ",(T1 - T0)*1000)
 
 #### FOR NOW EXIT THE SCRIPT#####################################
 sys.exit(1)
@@ -301,7 +326,6 @@ if MEAN:
         plt.subplot(math.floor(len(uniqueLabels)/2), len(uniqueLabels) - math.floor(len(uniqueLabels)/2), i+1)
         plt.plot(np.arange(1, data.shape[1]), trainingSamples[trainingLabels == i+1, :].T)
     plt.show()
-
 
 # classify image using tiles
 tiledClassify.tiledClassification( img,rf, tilesize = (tilesize,tilesize), outname=outname)
