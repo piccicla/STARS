@@ -19,10 +19,12 @@
 import settings
 ###########################################################
 # Get values from the settings file
+xxx = settings.parse_ini()
 
 setng={}
 
-setng['working_directory'] = working_directory = settings.working_directory
+
+setng['working_directory'] = working_directory = xxx["working_directory"]
 #os.chdir(settings.working_directory)
 
 ####setng['shapes'] = shapes = settings.shapes
@@ -32,47 +34,44 @@ setng['working_directory'] = working_directory = settings.working_directory
 
 # mean=True to get the average multiband pixel values inside polygons
 # mean=False to get all the multiband pixel values inside polygons
-setng['MEAN'] = MEAN = settings.mean
-setng['nodatavalue'] = nodatavalue = eval(settings.nodatavalue)
+setng['MEAN'] = MEAN = xxx["mean"]
+setng['nodatavalue'] = nodatavalue = eval(xxx["nodatavalue"])
 
-band_combinations = settings.band_combinations
+band_combinations = xxx["band_combinations"]
 if band_combinations != '*':
     exec(band_combinations)
 setng['band_combinations'] = band_combinations
-setng['pixel_subset'] = pixel_subset = settings.pixel_subset
-setng['NDI_chart_combinations'] = NDI_chart_combinations = eval(settings.NDI_chart_combinations)
+setng['pixel_subset'] = pixel_subset = xxx["pixel_subset"]
+setng['NDI_chart_combinations'] = NDI_chart_combinations = eval(xxx["NDI_chart_combinations"])
 
-setng['hara_dir'] = hara_dir = settings.hara_dir
-setng['haralick_format'] = haralick_format = eval(settings.haralick_format)
-setng['haralick_image_type'] = haralick_image_type =  eval(settings.haralick_image_type)
-setng['hara_ndi_dir'] = hara_ndi_dir = settings.hara_ndi_dir
-setng['haralick_ndi_format'] = haralick_ndi_format =  eval(settings.haralick_ndi_format)
-setng['heralick_ndi_type'] = haralick_ndi_type =  eval(settings.haralick_ndi_type)
+setng['hara_dir'] = hara_dir = xxx["hara_dir"]
+setng['haralick_format'] = haralick_format = eval(xxx["haralick_format"])
+setng['haralick_image_type'] = haralick_image_type =  eval(xxx["haralick_image_type"])
+setng['hara_ndi_dir'] = hara_ndi_dir = xxx["hara_ndi_dir"]
+setng['haralick_ndi_format'] = haralick_ndi_format =  eval(xxx["haralick_ndi_format"])
+setng['heralick_ndi_type'] = haralick_ndi_type =  eval(xxx["haralick_ndi_type"])
 
-setng['skll_dir'] = skll_dir = settings.skll_dir
-setng['boruta_dir'] = boruta_dir = settings.boruta_dir
+setng['skll_dir'] = skll_dir = xxx["skll_dir"]
+setng['boruta_dir'] = boruta_dir = xxx["boruta_dir"]
 
 # shapefile field that contains the classes
-setng['fieldname'] = fieldname = settings.field_name
+setng['fieldname'] = fieldname = xxx["field_name"]
 
 # percentage of validation data
-setng['percentage'] = percentage = settings.validation_data
+setng['percentage'] = percentage = xxx["validation_data"]
 
 # classified raster name
-setng['outname'] = outname = settings.out_name
+setng['outname'] = outname = xxx["out_name"]
 
 # size of the tiles (columns, rows)
-setng['tilesize'] = tilesize =settings.tile_size
+setng['tilesize'] = tilesize =xxx["tile_size"]
 
 #use ipyparallel
-setng['parallelize'] = parallelize = settings.parallelize
+setng['parallelize'] = parallelize = xxx["parallelize"]
+setng['engine_messages'] = engine_messages = xxx["engine_messages"]
+setng["max_processes"] = max_processes = xxx["max_processes"]
 
-setng['engine_messages'] = engine_messages =  settings.engine_messages
-
-
-paths = settings.paths
-
-
+paths = settings.parse_json()
 
 # import modules
 
@@ -110,10 +109,9 @@ def preparedata(imagetag):
 
     d = paths[imagetag]
 
+    ####return(d['content'][0]['shape'], d['content'][0]['raster'], fieldname,d['content'][0]['mask'],band_combinations,pixel_subset)
+
     ##os.chdir(working_directory)
-
-
-
 
     # prepare supervised data and output it to the skll folder
     if MEAN:
@@ -135,45 +133,69 @@ def preparedata(imagetag):
 
     else:
 
-        data, uniqueLabels,columnNames,subsetcollection = getPixelValues.getSinglePixelValues(shapes, img, fieldname,rastermask=treemask,combinations=band_combinations,subset=pixel_subset, returnsubset=True)
 
-        #output data to skll, we don't export the polygonID   |rowid,band1, band2,..., 1-2, 1-3,....,label|
-        # the first row will contain the field names
-        np.savetxt(image + '_dataPixelsComb.tsv', data[:,1:], fmt='%.4f', delimiter='\t', header= ''.join(columnNames[1:]), comments='')
+        #first we go to the directory that stores the images
+        os.chdir(d['basepath'])
 
-        #############   BORUTA  #####################
-        # there is no header the field names  |band1, band2,..., 1-2, 1-3,....|
-        #np.savetxt('dataPixelsCombX.csv', data[:,2:-1], fmt='%.4f', delimiter=',')
-        np.savetxt(image + '_dataPixelsCombX.csv', data[:,2:-1], fmt='%.4f', delimiter=',')
-        # there is no header with the field names  |polyID, rowid,band1, band2,..., 1-2, 1-3,....|
-        #np.savetxt('dataPixelsCombX+IDS.csv', data[:,:-1], fmt='%.4f', delimiter=',')
-        np.savetxt(image + '_dataPixelsCombX+IDS.csv', data[:,:-1], fmt='%.4f', delimiter=',')
-        # there is no header with the field names  |label|
-        #np.savetxt('dataPixelsCombY.csv', data[:,-1:], fmt='%.1f', delimiter=',')
-        np.savetxt(image + '_dataPixelsCombY.csv', data[:,-1:], fmt='%.1f', delimiter=',')
+        #for the same image we can have different shapes and masks
+        for n, comb in enumerate(d['content']):
 
-        ############    SKLL    ####################
-        # |rowid,band1, band2,,....,label|
-        #np.savetxt(r'D:\ITC\courseMaterial\module13GFM2\2015\code\STARS\processing\Skll\stars\train+dev\dataPixelsCombXA.tsv', np.hstack((data[:,1:10],data[:,-1:])), fmt='%.6f', delimiter='\t',header= ''.join(columnNames[1:10]+columnNames[-1:]), comments='')
-        np.savetxt(skll_dir + "/"+image+"_dataPixelsCombXA.tsv", np.hstack((data[:,1:10],data[:,-1:])), fmt='%.6f', delimiter='\t',header= ''.join(columnNames[1:10]+columnNames[-1:]), comments='')
+            data, uniqueLabels,columnNames,subsetcollection = getPixelValues.getSinglePixelValues(comb['shape'], comb['raster'], fieldname,rastermask=comb['mask'],combinations=band_combinations,subset=pixel_subset, returnsubset=True)
 
-        # |rowid,1-2, 1-3,....,label|
-        #np.savetxt(r'D:\ITC\courseMaterial\module13GFM2\2015\code\STARS\processing\Skll\stars\train+dev\dataPixelsCombXB.tsv', np.hstack((data[:,1:2],data[:,10:] )), fmt='%.6f', delimiter='\t',header= ''.join(columnNames[1:2]+columnNames[10:]), comments='')
-        np.savetxt(skll_dir + "/"+image+"_dataPixelsCombXB.tsv", np.hstack((data[:,1:2],data[:,10:] )), fmt='%.6f', delimiter='\t',header= ''.join(columnNames[1:2]+columnNames[10:]), comments='')
+            if not os.path.exists(skll_dir+"/"+d['name']):
+                os.mkdir(skll_dir+"/" + d['name'])
 
-        # |rowid,image1, image2,....,label|  ; in this case we have the heralick images
-        data, uniqueLabels, columnNames = getPixelValues.getGeneralSinglePixelValues(shapes, hera_dir, fieldname, inimgfrmt = heralick_format, rastermask=treemask, subset=subsetcollection, returnsubset = False)
-        np.savetxt(skll_dir + "/"+image+"_PixelsCombXC.tsv", data[:,1:],fmt='%.6f',delimiter='\t',header=''.join(columnNames[1:]),comments='')
 
-        # |rowid,image1, image2,....,label|  ; in this case we have the ndvi heralick images
-        data, uniqueLabels, columnNames = getPixelValues.getGeneralSinglePixelValues(shapes, hera_ndi_dir, fieldname, inimgfrmt = heralick_ndi_format, rastermask=treemask, subset=subsetcollection, returnsubset = False)
-        np.savetxt(skll_dir + "/"+image+"_PixelsCombXD.tsv", data[:,1:], fmt='%.6f', delimiter='\t',header= ''.join(columnNames[1:]), comments='')
+            #output data to skll, we don't export the polygonID   |rowid,band1, band2,..., 1-2, 1-3,....,label|
+            # the first row will contain the field names
+            np.savetxt(skll_dir+"/"+d['name'] + "/" + str(n) + '_dataPixelsComb.tsv', data[:,1:], fmt='%.4f', delimiter='\t', header= ''.join(columnNames[1:]), comments='')
 
-        ############    NDV charting    ##################
-        # save NDVI table (band 7 is NIR, band 5 is R)
-        # |polygonID, NDVI, labelcode| ; then use the table with the chartNDI.py script
-        data, uniqueLabels,columnNames = getPixelValues.getSinglePixelValues(shapes, img, fieldname,rastermask=treemask,combinations=NDI_chart_combinations,subset=None, returnsubset = False)
-        np.savetxt(image+"_NDVI.csv", np.hstack((data[:,0:1], data[:, -2:])), fmt='%.4f', delimiter=',')
+            #############   BORUTA  #####################
+
+            if not os.path.exists(boruta_dir+"/"+d['name']):
+                os.mkdir(boruta_dir+"/" + d['name'])
+
+            # there is no header the field names  |band1, band2,..., 1-2, 1-3,....|
+            #np.savetxt('dataPixelsCombX.csv', data[:,2:-1], fmt='%.4f', delimiter=',')
+            np.savetxt(boruta_dir+"/" + d['name'] + str(n) + '_dataPixelsCombX.csv', data[:,2:-1], fmt='%.4f', delimiter=',')
+            # there is no header with the field names  |polyID, rowid,band1, band2,..., 1-2, 1-3,....|
+            #np.savetxt('dataPixelsCombX+IDS.csv', data[:,:-1], fmt='%.4f', delimiter=',')
+            np.savetxt(boruta_dir+"/" + d['name'] + str(n) + '_dataPixelsCombX+IDS.csv', data[:,:-1], fmt='%.4f', delimiter=',')
+            # there is no header with the field names  |label|
+            #np.savetxt('dataPixelsCombY.csv', data[:,-1:], fmt='%.1f', delimiter=',')
+            np.savetxt(boruta_dir+"/" + d['name'] + str(n) + '_dataPixelsCombY.csv', data[:,-1:], fmt='%.1f', delimiter=',')
+
+            ############    SKLL    ####################
+            # |rowid,band1, band2,,....,label|
+            #np.savetxt(r'D:\ITC\courseMaterial\module13GFM2\2015\code\STARS\processing\Skll\stars\train+dev\dataPixelsCombXA.tsv', np.hstack((data[:,1:10],data[:,-1:])), fmt='%.6f', delimiter='\t',header= ''.join(columnNames[1:10]+columnNames[-1:]), comments='')
+            np.savetxt(skll_dir+"/"+d['name'] + "/" + str(n)+"_dataPixelsCombXA.tsv", np.hstack((data[:,1:10],data[:,-1:])), fmt='%.6f', delimiter='\t',header= ''.join(columnNames[1:10]+columnNames[-1:]), comments='')
+
+            # |rowid,1-2, 1-3,....,label|
+            #np.savetxt(r'D:\ITC\courseMaterial\module13GFM2\2015\code\STARS\processing\Skll\stars\train+dev\dataPixelsCombXB.tsv', np.hstack((data[:,1:2],data[:,10:] )), fmt='%.6f', delimiter='\t',header= ''.join(columnNames[1:2]+columnNames[10:]), comments='')
+            np.savetxt(skll_dir+"/"+d['name'] + "/" + str(n)+"_dataPixelsCombXB.tsv", np.hstack((data[:,1:2],data[:,10:] )), fmt='%.6f', delimiter='\t',header= ''.join(columnNames[1:2]+columnNames[10:]), comments='')
+
+
+            # haralick can be simple, advanced, higher
+            for type in d['haralick_images']:
+                t = d['haralick_images'][type]
+                if not t: continue
+                # |rowid,image1, image2,....,label|  ; in this case we have the heralick images
+                data, uniqueLabels, columnNames = getPixelValues.getGeneralSinglePixelValues(comb['shape'], t["basepath"], fieldname, t["images"], rastermask=comb['mask'], subset=subsetcollection, returnsubset = False)
+                np.savetxt(skll_dir+"/"+d['name'] + "/" + str(n)+ "_"+ type+"_PixelsCombXC.tsv", data[:,1:],fmt='%.6f',delimiter='\t',header=''.join(columnNames[1:]),comments='')
+
+            # haralick can be simple, advanced, higher
+            for type in d['haralick_ndi']:
+                t = d['haralick_ndi'][type]
+                if not t: continue
+                # |rowid,image1, image2,....,label|  ; in this case we have the ndvi heralick images
+                data, uniqueLabels, columnNames = getPixelValues.getGeneralSinglePixelValues(comb['shape'], t["basepath"], fieldname, t["images"], rastermask=comb['mask'], subset=subsetcollection, returnsubset = False)
+                np.savetxt(skll_dir+"/"+d['name'] + "/" + str(n)+ "_"+ type+ "_PixelsCombXD.tsv", data[:,1:], fmt='%.6f', delimiter='\t',header= ''.join(columnNames[1:]), comments='')
+
+            ############    NDV charting    ##################
+            # save NDVI table (band 7 is NIR, band 5 is R)
+            # |polygonID, NDVI, labelcode| ; then use the table with the chartNDI.py script
+            data, uniqueLabels,columnNames = getPixelValues.getSinglePixelValues(comb['shape'], comb['raster'], fieldname,rastermask=comb['mask'],combinations=NDI_chart_combinations,subset=None, returnsubset = False)
+            np.savetxt( str(n)+"_NDVI.csv", np.hstack((data[:,0:1], data[:, -2:])), fmt='%.4f', delimiter=',')
 
         return True
 
@@ -196,6 +218,7 @@ def wait_watching_stdout(ar, dt=0.1, truncate=500):
         time.sleep(dt)
     else:
         #print complete messages
+        stdouts = ar.stdout
         for stdout in stdouts:
             if stdout:
                 print ("[ stdout %s ]" %  stdout[-truncate:])
@@ -223,11 +246,15 @@ if parallelize:
             if client.ids:
                 call = False
     print("there are ", len(client.ids), "clients available")
+    print("we want to use up to",max_processes , "processes")
 
-    #creating a direct view
+    if max_processes < len(client.ids):
+        #creating a direct view
+        dview = client[:max_processes]
+    else:
+        dview = client[:]
     dview = client[:]
-
-    #pushing configuations to the workers
+    #pushing configurations to the workers
     for k in setng:
         dview[k]=setng[k]
 
@@ -238,9 +265,11 @@ if parallelize:
     dview.execute("import sys")
     dview.execute("sys.path.append(mydir)")
 
-
     #calling a function asyncronously on all engines, each image in paths is assigned to one engine
+
     ar = dview.map_async(preparedata, list(paths.keys()))
+    #ar = dview.map_async(preparedata, [0,0])
+
     #do we want the engine stdout
     if engine_messages:
         wait_watching_stdout(ar)
@@ -257,6 +286,7 @@ if parallelize:
 else:
     T0 = time.perf_counter()
     for i in  list(paths.keys()):
+    ####for i in  [0]:
         preparedata(i)
     T1 = time.perf_counter()
     print("sequential elapsed: ",(T1 - T0)*1000)

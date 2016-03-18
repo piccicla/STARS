@@ -215,6 +215,7 @@ def getSinglePixelValues(shapes, inraster, fieldname,rastermask=None, combinatio
             raster_srs.ImportFromWkt(raster.GetProjectionRef())
             target_ds.SetProjection(raster_srs.ExportToWkt())
 
+
             # create in memory vector layer that contains the feature
             drv = ogr.GetDriverByName("ESRI Shapefile")
             outDataSet = drv.CreateDataSource("/vsimem/memory.shp")
@@ -228,6 +229,7 @@ def getSinglePixelValues(shapes, inraster, fieldname,rastermask=None, combinatio
             outFeature.SetGeometry(geom)
             # add the feature to the shapefile
             outLayer.CreateFeature(outFeature)
+
 
             # Rasterize zone polygon to raster
             # outputraster, list of bands to update, input layer, list of values to burn
@@ -382,7 +384,7 @@ def getSinglePixelValues(shapes, inraster, fieldname,rastermask=None, combinatio
         if outDataSet: outDataSet = None
 
 
-def getGeneralSinglePixelValues(shapes, folderpath, fieldname, inimgfrmt = ['.tif'], rastermask=None, subset=None, returnsubset = False):
+def getGeneralSinglePixelValues_filter(shapes, folderpath, fieldname, inimgfrmt = ['.tif'], rastermask=None, subset=None, returnsubset = False):
     """ general function to intersect polygons/multipolygons with a group of multiband rasters
         IMPORTANT
         polygons and raster must have the same coordinate system!!!
@@ -452,7 +454,8 @@ def getGeneralSinglePixelValues(shapes, folderpath, fieldname, inimgfrmt = ['.ti
             classValues.append(feature.GetField(fieldname))
         # get the classes unique values
         uniqueLabels = set(classValues)
-
+        # reset the iterator
+        lyr.ResetReading()
         # get the content of the images directory
         imgs= os.listdir(folderpath)
 
@@ -599,9 +602,9 @@ def getGeneralSinglePixelValues(shapes, folderpath, fieldname, inimgfrmt = ['.ti
                     if imgcounter == 1:
                         #define label data for this polygon
                         label = (np.zeros(data[0].shape[0]) + label).reshape(data[0].shape[0],1)
-                        polygonID = (np.zeros(data[0].shape[0]) + polygonID).reshape(data[0].shape[0],1)
+                        polygonIDarray = (np.zeros(data[0].shape[0]) + polygonID).reshape(data[0].shape[0],1)
                         # fill in the list with all the labels, this will be the last column in the final output
-                        labels.append(label)
+
 
                     id = np.arange(idcounter,(data[0].shape[0]) + idcounter).reshape(data[0].shape[0], 1) #+1 is there to avoid first polygon different from 0
 
@@ -616,33 +619,35 @@ def getGeneralSinglePixelValues(shapes, folderpath, fieldname, inimgfrmt = ['.ti
                         #if the subset was a percentage we need to define the fancy indexer
                         #we can get it only for the first image
                         if type(subset) == int and imgcounter == 1:
-                            subsize = int((polygonID.shape[0]) * subset/100)
-                            idxsubsize = np.array(range(0, polygonID.shape[0]))
+                            subsize = int((polygonIDarray.shape[0]) * subset/100)
+                            idxsubsize = np.array(range(0, polygonIDarray.shape[0]))
                             numpy.random.shuffle(idxsubsize)
                             idxsubsize = idxsubsize[:subsize]
                             #print(idxsubsize.shape)
 
                             #we store the fancy index for this polygon
-                            subsetcollection[int(polygonID[0,0])] = idxsubsize
+                            subsetcollection[int(polygonID)] = idxsubsize
 
                         #if this is not the first image we get the correct fancy index from the collection
                         elif type(subset) == int:
-                            idxsubsize = subsetcollection[int(polygonID[0,0])]
+                            idxsubsize = subsetcollection[int(polygonID)]
 
                         else: #if the subset was a dictionary we extract the correct fancy indexer by key
-                            print(int(polygonID[0,0]))
-                            idxsubsize = subset[int(polygonID[0,0])]
+                            print(int(polygonID))
+                            idxsubsize = subset[int(polygonID)]
                             #print(idxsubsize)
 
                         # and we apply the fancy indexing
                         if imgcounter == 1:
-                            intermediatedata.append(np.hstack((polygonID, id,  vstackdata))[idxsubsize])
+                            intermediatedata.append(np.hstack((polygonIDarray, id,  vstackdata))[idxsubsize])
+                            labels.append(label[idxsubsize])
                         else:
                             intermediatedata.append(vstackdata[idxsubsize])
 
                     else: #there is no subset to apply, take all
                         if imgcounter == 1:
-                            intermediatedata.append(np.hstack((polygonID, id,  vstackdata)))
+                            intermediatedata.append(np.hstack((polygonIDarray, id,  vstackdata)))
+                            labels.append(label)
                         else:
                             intermediatedata.append(vstackdata)
 
@@ -703,6 +708,336 @@ def getGeneralSinglePixelValues(shapes, folderpath, fieldname, inimgfrmt = ['.ti
             outDataSet = None
         if band:
             band = None
+
+
+def getGeneralSinglePixelValues(shapes, folderpath, fieldname, images, rastermask=None, subset=None, returnsubset = False):
+    """ general function to intersect polygons/multipolygons with a group of multiband rasters
+        IMPORTANT
+        polygons and raster must have the same coordinate system!!!
+        the bands of a raster must have the same data type
+        feature falling partially or totally outside the raster will not be considered
+        when passing the subset as a dictionary be sure to use the same rastermask options used for the subset source
+
+    :param shapes: polygons/multipolygons shapefile
+    :param folderpath: folder with multiband rasters
+    :param fieldname: vector fieldname that contains the labelvalue
+    :param images: a list of images to process (not the absolute path)
+    :param rastermask: raster where value 0 is the mask
+    :param  subset: integer or dictionary
+                    - integer percentage (> 0; <100) deciding how much of each polygon you want to consider
+                    - a dictionary { polygonID: numpy.ndarray} where the numpy.ndarray is used to apply fancy index
+                    to filter the polygon with ID == polygonID
+    :param  returnsubset: bool, if true a subset datastructure { polygonID: numpy.ndarray} is returned
+    :return: 1) a 2d numpy array,
+                each row contains the polygonID column, the unique id column, the pixel
+                values for each raster band plus a column with the label:
+                the array shape is (numberpixels, numberofrasters*nbands + 3)
+
+                if mask the max numberpixels  per polygon may decrease
+                if subset the numberpixels will decrease
+             2) a set with the unique labels
+             3) a list with column names
+             4) if returnsubset is True will return the subset datastructure { polygonID: numpy.ndarray}
+    """
+
+    #checking if subset parameters is correct
+    if all([type(subset) != int, type(subset) != dict, subset is not None]):
+        raise TypeError('subset should be an integer, a dictionary, or None')
+    elif type(subset) == int and not(0 < subset < 100):
+        raise ValueError('subset should be more than 0 and less than 100 ')
+    elif type(subset) == dict and not subset:
+        raise ValueError('subset dictionary should not be empty')
+    elif type(subset) == dict and not type(next(iter(subset.values()))) == np.ndarray:
+        raise ValueError('subset should be a dictionary of ndarrays')
+
+
+    subsetcollection = {}
+
+
+    raster = None
+    shp = None
+    lyr = None
+    target_ds = None
+    outDataSet = None
+    outLayer = None
+    band = None
+    pixelmask = None
+    outdata = []
+
+    try:
+
+        shp = ogr.Open(shapes)
+        lyr = shp.GetLayer()
+
+        sourceSR = lyr.GetSpatialRef()
+
+        # get number of features; get number of bands
+        featureCount = lyr.GetFeatureCount()
+
+        # iterate features and extract unique labels
+        classValues = []
+        for feature in lyr:
+            classValues.append(feature.GetField(fieldname))
+        # get the classes unique values
+        uniqueLabels = set(classValues)
+        # reset the iterator
+        lyr.ResetReading()
+        # get the content of the images directory
+        ########imgs= os.listdir(folderpath)
+
+        imgcounter = 0  #keep track of the image number
+        label = None
+        columnNames = []
+        labels = []  #this will store all the labels
+
+        # iterate all the files and keep only the ones with the correct extension
+        for i in images:
+
+
+            ##### filter content, we want files with the correct extension
+            #####if os.path.isfile(folderpath+'/'+i) and (os.path.splitext(folderpath+'/'+i)[-1] in inimgfrmt) :
+
+            # increase the image counter and open raster data
+            imgcounter += 1
+            raster = gdal.Open(folderpath+'/'+i)
+            nbands = raster.RasterCount
+
+            # we need to get the raster datatype for later use (assumption:every band has the same data type)
+            band = raster.GetRasterBand(1)
+            raster_data_type = band.DataType
+
+            # Get raster georeference info
+
+            width = raster.RasterXSize
+            height = raster.RasterYSize
+
+            transform = raster.GetGeoTransform()
+            xOrigin = minx = transform[0]
+            yOrigin = maxy =  transform[3]
+            miny = transform[3] + width*transform[4] + height*transform[5]
+            maxx = transform[0] + width*transform[1] + height*transform[2]
+            pixelWidth = transform[1]
+            pixelHeight = transform[5]
+
+            numfeature = 0
+
+            # keep trak of the number of ids, necessary to assign id to subsequent polygons
+            idcounter = 1
+
+            # reset the iterator
+            lyr.ResetReading()
+
+            intermediatedata = []
+
+
+            if rastermask:
+                pixelmask = gdal.Open(rastermask)
+
+            for feat in lyr:
+
+                numfeature += 1
+                print("working on feature %d of %d, raster %s" % (numfeature, featureCount, i))
+
+                #get the label and the polygon ID
+                label = feat.GetField(fieldname)
+                polygonID = feat.GetFID() + 1  #I add one to avoid the first polygonID==0
+
+                #  Get extent of feature
+                geom = feat.GetGeometryRef()
+                if geom.GetGeometryName() == "MULTIPOLYGON":
+                    count = 0
+                    pointsX = []; pointsY = []
+                    for polygon in geom:
+                        geomInner = geom.GetGeometryRef(count)
+                        ring = geomInner.GetGeometryRef(0)
+                        numpoints = ring.GetPointCount()
+                        for p in range(numpoints):
+                            lon, lat, z = ring.GetPoint(p)
+                            pointsX.append(lon)
+                            pointsY.append(lat)
+                        count += 1
+                elif geom.GetGeometryName() == "POLYGON":
+                    ring = geom.GetGeometryRef(0)
+                    numpoints = ring.GetPointCount()
+                    pointsX = []
+                    pointsY = []
+                    for p in range(numpoints):
+                        lon, lat, z = ring.GetPoint(p)
+                        pointsX.append(lon)
+                        pointsY.append(lat)
+
+                else:
+                    raise Exception("ERROR: Geometry needs to be either Polygon or Multipolygon")
+
+                xmin = min(pointsX)
+                xmax = max(pointsX)
+                ymin = min(pointsY)
+                ymax = max(pointsY)
+
+                #check if this feature is completely inside the raster, if not skip it
+                if any([xmin < minx, xmax > maxx, ymin < miny, ymax > maxy]):
+                    print('feature with id = %d is falling outside the raster and will not be considered'%feat.GetFID())
+                    continue
+
+                # Specify offset and rows and columns to read
+                xoff = int((xmin - xOrigin)/pixelWidth)
+                yoff = int((yOrigin - ymax)/pixelWidth)
+                xcount = int((xmax - xmin)/pixelWidth)+1
+                ycount = int((ymax - ymin)/pixelWidth)+1
+
+                # Create memory target multiband raster, with the same nbands and datatype as the input raster
+                target_ds = gdal.GetDriverByName("MEM").Create("", xcount, ycount, nbands, raster_data_type)
+                target_ds.SetGeoTransform((
+                    xmin, pixelWidth, 0,
+                    ymax, 0, pixelHeight,
+                ))
+
+                # Create for target raster the same projection as for the value raster
+                raster_srs = osr.SpatialReference()
+                raster_srs.ImportFromWkt(raster.GetProjectionRef())
+                target_ds.SetProjection(raster_srs.ExportToWkt())
+
+                #create in memory vector layer that contains the feature
+                drv = ogr.GetDriverByName("ESRI Shapefile")
+                outDataSet = drv.CreateDataSource("/vsimem/memory.shp")
+                outLayer = outDataSet.CreateLayer("memoryshp", srs=sourceSR, geom_type=lyr.GetGeomType())
+
+                # set the output layer's feature definition
+                outLayerDefn = lyr.GetLayerDefn()
+                # create a new feature
+                outFeature = ogr.Feature(outLayerDefn)
+                # set the geometry and attribute
+                outFeature.SetGeometry(geom)
+                # add the feature to the shapefile
+                outLayer.CreateFeature(outFeature)
+
+                # Rasterize zone polygon to raster
+                # outputraster, list of bands to update, input layer, list of values to burn
+                gdal.RasterizeLayer(target_ds, list(range(1,nbands+1)), outLayer, burn_values=[label]*nbands)
+
+                # Read rasters as arrays
+                dataraster = raster.ReadAsArray(xoff, yoff, xcount, ycount).astype(np.float)
+                datamask = target_ds.ReadAsArray(0, 0, xcount, ycount).astype(np.float)
+
+                if rastermask: #if we have a mask (e.g trees)
+                    pixelmasker = pixelmask.ReadAsArray(xoff, yoff, xcount, ycount).astype(np.float)
+                    datamask = datamask * pixelmasker
+
+                #extract the data for each band
+                data = []
+                for j in range(nbands):
+                    data.append(dataraster[j][datamask[j]>0])
+
+                if imgcounter == 1:
+                    #define label data for this polygon
+                    label = (np.zeros(data[0].shape[0]) + label).reshape(data[0].shape[0],1)
+                    polygonIDarray = (np.zeros(data[0].shape[0]) + polygonID).reshape(data[0].shape[0],1)
+                    # fill in the list with all the labels, this will be the last column in the final output
+
+                id = np.arange(idcounter,(data[0].shape[0]) + idcounter).reshape(data[0].shape[0], 1) #+1 is there to avoid first polygon different from 0
+
+                # update the starting id for the next polygon
+                idcounter += data[0].shape[0]
+                vstackdata = np.vstack(data).T
+
+
+                #if subset we need to define the correct fancy indexing
+                if subset:
+
+                    #if the subset was a percentage we need to define the fancy indexer
+                    #we can get it only for the first image
+                    if type(subset) == int and imgcounter == 1:
+                        subsize = int((polygonIDarray.shape[0]) * subset/100)
+                        idxsubsize = np.array(range(0, polygonIDarray.shape[0]))
+                        numpy.random.shuffle(idxsubsize)
+                        idxsubsize = idxsubsize[:subsize]
+                        #print(idxsubsize.shape)
+
+                        #we store the fancy index for this polygon
+                        subsetcollection[int(polygonID)] = idxsubsize
+
+                    #if this is not the first image we get the correct fancy index from the collection
+                    elif type(subset) == int:
+                        idxsubsize = subsetcollection[int(polygonID)]
+
+                    else: #if the subset was a dictionary we extract the correct fancy indexer by key
+                        print(int(polygonID))
+                        idxsubsize = subset[int(polygonID)]
+                        #print(idxsubsize)
+
+                    # and we apply the fancy indexing
+                    if imgcounter == 1:
+                        intermediatedata.append(np.hstack((polygonIDarray, id,  vstackdata))[idxsubsize])
+                        labels.append(label[idxsubsize])
+                    else:
+                        intermediatedata.append(vstackdata[idxsubsize])
+
+                else: #there is no subset to apply, take all
+                    if imgcounter == 1:
+                        intermediatedata.append(np.hstack((polygonIDarray, id,  vstackdata)))
+                        labels.append(label)
+                    else:
+                        intermediatedata.append(vstackdata)
+
+                # Mask zone of raster
+                #zoneraster = np.ma.masked_array(dataraster,  np.logical_not(datamask))
+                # Calculate statistics of zonal raster
+                #return np.average(zoneraster),np.mean(zoneraster),np.median(zoneraster),np.std(zoneraster),np.var(zoneraster)
+
+                #give control back to c++ to free memory
+                target_ds = None
+                outLayer = None
+                outDataSet = None
+
+            #########END for feat in lyr
+
+
+            #store the field names
+            if imgcounter == 1:
+                columnNames += ["polyID\t","id\t"]
+            for k in range(nbands):
+                columnNames.append(i + "_b" + str(k+1)+"\t")
+
+            # stack vertically the output of each feature class
+            outdata.append (np.vstack(intermediatedata))
+
+        ########## END for i in imgs
+
+        # stack horizontally
+        outdata = np.hstack(outdata)
+        # finally append the lables at the end
+        outdata = np.hstack((outdata, np.vstack(labels)))
+
+        columnNames.append("label")
+
+        if returnsubset:
+            if type(subset) == int:
+                return (outdata, uniqueLabels, columnNames, subsetcollection)
+            else: #if the subset was already a datastucture we just return it
+                return (outdata, uniqueLabels, columnNames, subset)
+        return (outdata, uniqueLabels, columnNames)
+
+    finally:
+
+        #give control back to c++ to free memory
+        if raster:
+            raster = None
+        if pixelmask:
+            pixelmask = None
+        if shp:
+            shp = None
+        if lyr:
+            lyr = None
+        if target_ds:
+            target_ds = None
+        if outLayer:
+            outLayer = None
+        if outDataSet:
+            outDataSet = None
+        if band:
+            band = None
+
+
 
 
 def getMeanPixelValues(shapes, inraster, fieldname, combinations ='*', nodatavalue=None):

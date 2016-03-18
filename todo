@@ -1,6 +1,6 @@
 add code in main.py to process multiple images; think about the folders organization
 
-finish the main with MEAN==false
+FIX BUG WHEN PARALLEL PROCESSING IS ON
 
 recalculate heralick images with 10% subset
 

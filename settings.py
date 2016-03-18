@@ -13,62 +13,76 @@ import utility
 #################### parsing the main.ini ##########################
 
 
-parser = parser()
-parser.read("./settings/main.ini")
 
-#print(parser.sections())
+def parse_ini(inpt = "./settings/main.ini" ):
+    """
+    :param inpt:
+    :return:
+    """
 
-indata = parser['indata']
-working_directory = indata.get("working_directory",".")
+    out = {}
 
-field_name = indata.get("field_name","")
-if not field_name: raise ValueError("input field_name is mandatory")
+    p = parser()
+    p.read(inpt)
 
-data_extraction = parser['data_extraction']
-mean = data_extraction.getboolean("mean", False)
-#the band combinations to use in format [(1,2),(1,3),....]; use * for all combinations; [] for no combinations
-band_combinations = data_extraction.get("band_combinations","[]")
-# a percentage of pixels to consider during polygons to raster intersection (>0); use 100 if no subset
-pixel_subset = data_extraction.getint("pixel_subset", 100)
-if pixel_subset == 100:
-    pixel_subset = None
-# the single band combination to use for charting the NDI in format [(1,2)]; only one combination is now possible
-NDI_chart_combinations = data_extraction.get("NDI_chart_combinations" , "[(7,5)]")
-#the nodatavalue to assign when polygons falls outside the raster (this works when mean == True)
-nodatavalue =  data_extraction.get("nodatavalue", None)
+    #print(parser.sections())
 
-haralick = parser['haralick']
-#folder tha will contain the input image for heralick
-hara_dir = haralick.get("hara_dir","." )
-# heralick image suffix format (comma separated list)
-haralick_format = haralick.get("haralick_format","tif")
-#simple, advanced, higher?
-haralick_image_type = haralick.get("haralick_image_type","simple")
-#folder tha will contain the input ndi images for heralick
-hara_ndi_dir =  haralick.get("hara_ndi_dir" ,"." )
-# heralick ndi image suffix format (comma separated list)
-haralick_ndi_format =haralick.get("haralick_ndi_format" , "tif")
-#simple, advanced, higher?
-haralick_ndi_type = haralick.get("haralick_ndi_type","simple")
+    indata = p['indata']
 
-skll = parser['skll']
-skll_dir = skll.get("skll_dir","." )
+    out["working_directory"] = indata.get("working_directory",".")
+    field_name = indata.get("field_name","")
+    if not field_name: raise ValueError("input field_name is mandatory")
+    else: out["field_name"]=field_name
 
-boruta = parser['boruta']
-boruta_dir = boruta.get("boruta_dir","." )
+    data_extraction = p['data_extraction']
+    out["mean"] = data_extraction.getboolean("mean", False)
+    #the band combinations to use in format [(1,2),(1,3),....]; use * for all combinations; [] for no combinations
+    out["band_combinations"] = data_extraction.get("band_combinations","[]")
+    # a percentage of pixels to consider during polygons to raster intersection (>0); use 100 if no subset
+    pixel_subset = data_extraction.getint("pixel_subset", 100)
+    if pixel_subset == 100:
+        pixel_subset = None
+    else: out["pixel_subset"] = pixel_subset
+    # the single band combination to use for charting the NDI in format [(1,2)]; only one combination is now possible
+    out["NDI_chart_combinations"] = data_extraction.get("NDI_chart_combinations" , "[(7,5)]")
 
-classification = parser['classification']
-#percentage of validation data
-validation_data = classification.getint("validation_data", 25)
-# classified raster name prefix
-out_name =   classification.get("out_name", "classify.tif")
-#tile size used during classification
-tile_size = classification.getint("tile_size", 1024)
+    #the nodatavalue to assign when polygons falls outside the raster (this works when mean == True)
+    out["nodatavalue"] =  data_extraction.get("nodatavalue", None)
 
+    haralick = p['haralick']
+    #folder tha will contain the input image for heralick
+    out["hara_dir"] = haralick.get("hara_dir","." )
+    # heralick image suffix format (comma separated list)
+    out["haralick_format"] = haralick.get("haralick_format","tif")
+    #simple, advanced, higher?
+    out["haralick_image_type"] = haralick.get("haralick_image_type","simple")
+    #folder tha will contain the input ndi images for heralick
+    out["hara_ndi_dir"] =  haralick.get("hara_ndi_dir" ,"." )
+    # heralick ndi image suffix format (comma separated list)
+    out["haralick_ndi_format"] =haralick.get("haralick_ndi_format" , "tif")
+    #simple, advanced, higher?
+    out["haralick_ndi_type"] = haralick.get("haralick_ndi_type","simple")
 
-ipyparallel = parser['ipyparallel']
-parallelize = ipyparallel.getboolean('parallelize', False)
-engine_messages = ipyparallel.getboolean('engine_messages', False)
+    skll = p['skll']
+    out["skll_dir"] = skll.get("skll_dir","." )
+
+    boruta = p['boruta']
+    out["boruta_dir"] = boruta.get("boruta_dir","." )
+
+    classification = p['classification']
+    #percentage of validation data
+    out["validation_data"] = classification.getint("validation_data", 25)
+    # classified raster name prefix
+    out["out_name"] =   classification.get("out_name", "classify.tif")
+    #tile size used during classification
+    out["tile_size"] = classification.getint("tile_size", 1024)
+
+    ipyparallel = p['ipyparallel']
+    out["parallelize"] = ipyparallel.getboolean('parallelize', False)
+    out["engine_messages"] = ipyparallel.getboolean('engine_messages', False)
+    out["max_processes"] = ipyparallel.getint("max_processes", 4)
+
+    return out
 
 ############# parsing the paths.json #########################
 
@@ -123,85 +137,95 @@ def extract_haralick_images(tag0, tag1, tag2 ):
             raise NotImplementedError("only folders are possible")
 
 
-f= open("./settings/paths.json")
-j=json.load(f)
+def parse_json(inpt = "./settings/paths.json"):
+    """
+    :param inpt:
+    :return:
+    """
 
-#here we initilize the data structure
+    f= open(inpt)
+    j=json.load(f)
 
-paths = {}
+    #here we initilize the data structure
 
-#iterate all the satellite images
-for i,im in enumerate(j["images"]):
+    paths = {}
 
-    paths[i] = {}
+    #iterate all the satellite images
+    for i,im in enumerate(j["images"]):
 
-    print("this is image ",i)
-    image = im["image"]
-    print(image["type"])
+        paths[i] = {}
 
-    if image["type"] == "folder":
+        #print("this is image ",i)
+        image = im["image"]
+        #print(image["type"])
 
-        paths[i]["type"] = image["type"]
-        paths[i]["name"] = image["name"]
-        paths[i]["basepath"] = image["basepath"] + "/" + image["name"]
+        if image["type"] == "folder":
 
-        paths[i]["content"] = []
+            paths[i]["type"] = image["type"]
+            paths[i]["name"] = image["name"]
+            paths[i]["basepath"] = image["basepath"] + "/" + image["name"]
 
-        for n,content in enumerate(image["content"]):
-            paths[i]["content"].append({})
-            paths[i]["content"][n]["raster"] = content["raster"]
-            paths[i]["content"][n]["shape"] = content["shapes"]
-            paths[i]["content"][n]["mask"] = content.get("mask", None)
+            paths[i]["content"] = []
 
-        y = paths[i]
-        #y["haralick_images"] = {}
-        #y["haralick_images"]["simple"] = {}
-        #y["haralick_images"]["advanced"] = {}
-        #y["haralick_images"]["higher"] = {}
+            for n,content in enumerate(image["content"]):
+                paths[i]["content"].append({})
+                paths[i]["content"][n]["raster"] = content["raster"]
+                paths[i]["content"][n]["shape"] = content["shapes"]
+                paths[i]["content"][n]["mask"] = content.get("mask", None)
 
-        extract_haralick_images(tag0="haralick_images", tag1=y, tag2=image)
+            y = paths[i]
+            #y["haralick_images"] = {}
+            #y["haralick_images"]["simple"] = {}
+            #y["haralick_images"]["advanced"] = {}
+            #y["haralick_images"]["higher"] = {}
 
-        y = paths[i]
+            extract_haralick_images(tag0="haralick_images", tag1=y, tag2=image)
 
-        extract_haralick_images(tag0="haralick_ndi", tag1=y, tag2=image)
+            y = paths[i]
 
-    else:
-        raise NotImplementedError("only folders are possible")
+            extract_haralick_images(tag0="haralick_ndi", tag1=y, tag2=image)
 
+        else:
+            raise NotImplementedError("only folders are possible")
 
+    return paths
 
 if __name__ == "__main__":
 
-    print("working_directory:" ,working_directory)
+
+    out = parse_ini()
+    print("working_directory:" ,out["working_directory"])
     #print("shapes:"  ,shapes)
-    print("field_name:" ,field_name)
+    print("field_name:" ,out["field_name"])
     #print("image:" ,image)
     #print("tree_mask:" ,tree_mask)
 
     print()
-    print("mean:" ,mean)
-    print("band_combinations:" ,band_combinations)
-    print("pixel_subset:" ,pixel_subset)
-    print("NDI_chart_combinations:" ,NDI_chart_combinations)
+    print("mean:" ,out["mean"])
+    print("band_combinations:" ,out["band_combinations"])
+    print("pixel_subset:" ,out["pixel_subset"])
+    print("NDI_chart_combinations:" ,out["NDI_chart_combinations"])
 
     print()
-    print("hara_dir:" ,hara_dir)
-    print("haralick_format:" ,haralick_format)
-    print("haralick_image_type:" ,haralick_image_type)
-    print("hara_ndi_dir:" ,hara_ndi_dir)
-    print("haralick_ndi_format:" ,haralick_ndi_format)
-    print("haralick_ndi_type:" ,haralick_ndi_type)
+    print("hara_dir:" ,out["hara_dir"])
+    print("haralick_format:" ,out["haralick_format"])
+    print("haralick_image_type:" ,out["haralick_image_type"])
+    print("hara_ndi_dir:" ,out["hara_ndi_dir"])
+    print("haralick_ndi_format:" ,out["haralick_ndi_format"])
+    print("haralick_ndi_type:" ,out["haralick_ndi_type"])
 
     print()
-    print("skll_dir:" ,skll_dir)
+    print("skll_dir:" ,out["skll_dir"])
     print()
-    print("boruta_dir:" ,boruta_dir)
+    print("boruta_dir:" ,out["boruta_dir"])
     print()
-    print("validation_data:" ,validation_data)
-    print("out_name:" ,out_name)
-    print("tile_size:" ,tile_size)
+    print("validation_data:" ,out["validation_data"])
+    print("out_name:" ,out["out_name"])
+    print("tile_size:" ,out["tile_size"])
     print()
-    print("parallelize:" ,parallelize)
+    print("parallelize:" ,out["parallelize"])
     print("#####################")
+
+    paths = parse_json()
     print(paths)
 
