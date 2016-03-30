@@ -100,7 +100,7 @@ def getSinglePixelValues(shapes, inraster, fieldname,rastermask=None, combinatio
     try:
 
         # Open data
-        raster = gdal.Open(inraster)
+        raster = gdal.Open(inraster,gdalconst.GA_ReadOnly)
         shp = ogr.Open(shapes)
         lyr = shp.GetLayer()
 
@@ -148,7 +148,7 @@ def getSinglePixelValues(shapes, inraster, fieldname,rastermask=None, combinatio
             comb_column_names = comb_column_names[0: int(numberCombinations)]
 
         if rastermask:
-            pixelmask = gdal.Open(rastermask)
+            pixelmask = gdal.Open(rastermask,gdalconst.GA_ReadOnly)
 
 
         for feat in lyr:
@@ -470,7 +470,7 @@ def getGeneralSinglePixelValues_filter(shapes, folderpath, fieldname, inimgfrmt 
             if os.path.isfile(folderpath+'/'+i) and (os.path.splitext(folderpath+'/'+i)[-1] in inimgfrmt) :
                 # increase the image counter and open raster data
                 imgcounter += 1
-                raster = gdal.Open(folderpath+'/'+i)
+                raster = gdal.Open(folderpath+'/'+i,gdalconst.GA_ReadOnly)
                 nbands = raster.RasterCount
 
                 # we need to get the raster datatype for later use (assumption:every band has the same data type)
@@ -502,7 +502,7 @@ def getGeneralSinglePixelValues_filter(shapes, folderpath, fieldname, inimgfrmt 
 
 
                 if rastermask:
-                    pixelmask = gdal.Open(rastermask)
+                    pixelmask = gdal.Open(rastermask,gdalconst.GA_ReadOnly)
 
                 for feat in lyr:
 
@@ -799,7 +799,7 @@ def getGeneralSinglePixelValues(shapes, folderpath, fieldname, images, rastermas
 
             # increase the image counter and open raster data
             imgcounter += 1
-            raster = gdal.Open(folderpath+'/'+i)
+            raster = gdal.Open(folderpath+'/'+i,gdalconst.GA_ReadOnly)
             nbands = raster.RasterCount
 
             # we need to get the raster datatype for later use (assumption:every band has the same data type)
@@ -831,7 +831,7 @@ def getGeneralSinglePixelValues(shapes, folderpath, fieldname, images, rastermas
 
 
             if rastermask:
-                pixelmask = gdal.Open(rastermask)
+                pixelmask = gdal.Open(rastermask,gdalconst.GA_ReadOnly)
 
             for feat in lyr:
 
@@ -1090,7 +1090,7 @@ def getMeanPixelValues(shapes, inraster, fieldname, combinations ='*', nodataval
     try:
         # open image
         # import the NDVI raster and get number of bands
-        dataset = gdal.Open(inraster)
+        dataset = gdal.Open(inraster,gdalconst.GA_ReadOnly)
 
         nbands = dataset.RasterCount
 

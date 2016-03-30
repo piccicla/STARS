@@ -157,13 +157,13 @@ def preparedata(imagetag):
 
             # there is no header the field names  |band1, band2,..., 1-2, 1-3,....|
             #np.savetxt('dataPixelsCombX.csv', data[:,2:-1], fmt='%.4f', delimiter=',')
-            np.savetxt(boruta_dir+"/" + d['name'] + str(n) + '_dataPixelsCombX.csv', data[:,2:-1], fmt='%.4f', delimiter=',')
+            np.savetxt(boruta_dir+"/" + d['name'] +"/" + str(n) + '_dataPixelsCombX.csv', data[:,2:-1], fmt='%.4f', delimiter=',')
             # there is no header with the field names  |polyID, rowid,band1, band2,..., 1-2, 1-3,....|
             #np.savetxt('dataPixelsCombX+IDS.csv', data[:,:-1], fmt='%.4f', delimiter=',')
-            np.savetxt(boruta_dir+"/" + d['name'] + str(n) + '_dataPixelsCombX+IDS.csv', data[:,:-1], fmt='%.4f', delimiter=',')
+            np.savetxt(boruta_dir+"/" + d['name'] +"/" + str(n) + '_dataPixelsCombX+IDS.csv', data[:,:-1], fmt='%.4f', delimiter=',')
             # there is no header with the field names  |label|
             #np.savetxt('dataPixelsCombY.csv', data[:,-1:], fmt='%.1f', delimiter=',')
-            np.savetxt(boruta_dir+"/" + d['name'] + str(n) + '_dataPixelsCombY.csv', data[:,-1:], fmt='%.1f', delimiter=',')
+            np.savetxt(boruta_dir+"/" + d['name'] +"/" + str(n) + '_dataPixelsCombY.csv', data[:,-1:], fmt='%.1f', delimiter=',')
 
             ############    SKLL    ####################
             # |rowid,band1, band2,,....,label|
@@ -212,8 +212,8 @@ def wait_watching_stdout(ar, dt=0.1, truncate=500):
         print ("")
         for stdout in stdouts:
             if stdout:
-                print("processing OK")
-                #print ("[ stdout %s ]" %  stdout[-truncate:])
+                #print("processing OK")
+                print ("[ stdout %s ]" %  stdout[-truncate:])
         sys.stdout.flush()
         time.sleep(dt)
     else:
@@ -286,7 +286,7 @@ if parallelize:
 else:
     T0 = time.perf_counter()
     for i in  list(paths.keys()):
-    ####for i in  [0]:
+    #for i in  [0,0]:
         preparedata(i)
     T1 = time.perf_counter()
     print("sequential elapsed: ",(T1 - T0)*1000)
