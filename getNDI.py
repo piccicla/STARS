@@ -111,8 +111,8 @@ def workflow(rootpath, inputimage, outdir, nbands,debug ):
 if __name__ == "__main__":
 
     debug = True # print all tool error messages and running time
-    rootpath = "D:/ITC/courseMaterial/module13GFM2/2015/code/STARS/code/testdata/"
-    inputimage = "raster.tif"
-    outdir = "indexes"
+    rootpath = r"D:\ITC\courseMaterial\module13GFM2\2015\code\STARS\processing"
+    inputimage = "/rasters/ENVIraster/ENVIraster.tif"
+    outdir = "/indexes/ENVIraster"
 
     workflow(rootpath, inputimage, outdir, 8 ,debug=debug)

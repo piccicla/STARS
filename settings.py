@@ -49,19 +49,21 @@ def parse_ini(inpt = "./settings/main.ini" ):
     #the nodatavalue to assign when polygons falls outside the raster (this works when mean == True)
     out["nodatavalue"] =  data_extraction.get("nodatavalue", None)
 
-    haralick = p['haralick']
+
+    #this is not necessary anymore because now the heralick paths are in thejson file
+    #haralick = p['haralick']
     #folder tha will contain the input image for heralick
-    out["hara_dir"] = haralick.get("hara_dir","." )
+    #out["hara_dir"] = haralick.get("hara_dir","." )
     # heralick image suffix format (comma separated list)
-    out["haralick_format"] = haralick.get("haralick_format","tif")
+    #out["haralick_format"] = haralick.get("haralick_format","tif")
     #simple, advanced, higher?
-    out["haralick_image_type"] = haralick.get("haralick_image_type","simple")
+    #out["haralick_image_type"] = haralick.get("haralick_image_type","simple")
     #folder tha will contain the input ndi images for heralick
-    out["hara_ndi_dir"] =  haralick.get("hara_ndi_dir" ,"." )
+    #out["hara_ndi_dir"] =  haralick.get("hara_ndi_dir" ,"." )
     # heralick ndi image suffix format (comma separated list)
-    out["haralick_ndi_format"] =haralick.get("haralick_ndi_format" , "tif")
+    #out["haralick_ndi_format"] =haralick.get("haralick_ndi_format" , "tif")
     #simple, advanced, higher?
-    out["haralick_ndi_type"] = haralick.get("haralick_ndi_type","simple")
+    #out["haralick_ndi_type"] = haralick.get("haralick_ndi_type","simple")
 
     skll = p['skll']
     out["skll_dir"] = skll.get("skll_dir","." )
@@ -206,13 +208,14 @@ if __name__ == "__main__":
     print("pixel_subset:" ,out["pixel_subset"])
     print("NDI_chart_combinations:" ,out["NDI_chart_combinations"])
 
-    print()
-    print("hara_dir:" ,out["hara_dir"])
-    print("haralick_format:" ,out["haralick_format"])
-    print("haralick_image_type:" ,out["haralick_image_type"])
-    print("hara_ndi_dir:" ,out["hara_ndi_dir"])
-    print("haralick_ndi_format:" ,out["haralick_ndi_format"])
-    print("haralick_ndi_type:" ,out["haralick_ndi_type"])
+    #this is not necessary anymore because the heralik paths are now in the json file
+    #print()
+    #print("hara_dir:" ,out["hara_dir"])
+    #print("haralick_format:" ,out["haralick_format"])
+    #print("haralick_image_type:" ,out["haralick_image_type"])
+    #print("hara_ndi_dir:" ,out["hara_ndi_dir"])
+    #print("haralick_ndi_format:" ,out["haralick_ndi_format"])
+    #print("haralick_ndi_type:" ,out["haralick_ndi_type"])
 
     print()
     print("skll_dir:" ,out["skll_dir"])

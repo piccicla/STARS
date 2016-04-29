@@ -1,53 +1,47 @@
 # -*- coding: utf-8 -*-
 
-#this is just a playground file to test things
 
-import skll.utilities as r
-import os
-import warnings
-
-def run_script(params):
-    """ execute a python script
-    :param params: a list of strings [ 'python version' , 'parameters']
-    :return: script output
-    """
-    import subprocess
-    params.insert(0,"py")
-    p = subprocess.Popen(params, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    #print(params)
-    out, err= p.communicate()
-    #return bytes.decode(out)+'\n'+ bytes.decode(err)
-    return bytes.decode(out), bytes.decode(err)
-
-#get the path of skll.utilities directory
-
-#path = os.path.dirname(r.__file__)
+#1) Creating a big and empty raster, same as the original image
+m = np.zeros((1157, 1553))
 
 
-#call the skll run_experiment.py script
-#run_script(["-3.5", path+"/"+"run_experiment.py"])
+#2) We fill the matrix with each ONE value found in each of the 45 little rasters, recycling variable m (defined in step 1)
 
 
-#call the skll run_experiment.py script
-#print(run_script(["-3.5", path+"/"+ "skll_convert.py", r"D:\ITC\courseMaterial\module13GFM2\2015\code\STARS\processing\dataMean.tsv",
-#                  r"D:\ITC\courseMaterial\module13GFM2\2015\code\STARS\processing\dataMean.jsonlines","-l","label"]))
+if rastermask: #if we have a mask (e.g trees)
+    pixelmasker = pixelmask.ReadAsArray(xoff, yoff, xcount, ycount).astype(np.float)
+    datamask = datamask * pixelmasker
+    m = utility.fill_matrix(m, xoff, yoff, xcount, ycount, datamask)
 
-#path = r"C:\Python35_64\Lib\site-packages\skll\utilities"
+#3) The code of the filling function
+def fill_matrix(m, xoff, yoff, xcount, ycount, pixelmask):
+    # print("xoff: {0}, yoff: {1}, xcount: {2}, ycount: {3}".format(xoff, yoff, xcount, ycount))
+    for i in range(0, ycount):
+        for j in range(0, xcount):
+            if pixelmask[0, i, j] == 1:
+                m[i+yoff][j+xoff] = 1
+    return m
 
-#warnings.simplefilter("ignore")
+#4) Change type of return of the function, by also returning the big raster with the selected pixels
 
-#call the skll run_experiment.py script
-#print(run_script(["-3.5", path+"/"+ "run_experiment.py", r"D:\ITC\courseMaterial\module13GFM2\2015\code\STARS\processing\skllTutorial\examples\titanic\evaluate_tuned.cfg"]))
+return (outdata, uniqueLabels, columnNames, m)
 
+#5) Getting this raster in the test file, then writing it to tiff
+data, uniqueLabels, columnNames, m = getPixelValues.getGeneralSinglePixelValues(path_shape, path_tif, label_col, [img_name], rastermask=path_mask, subset=None, returnsubset = False)
+utility.write_array_as_tiff(m, tif, path_out, name)
 
-inpath = r"D:\ITC\courseMaterial\module13GFM2\2015\code\STARS\processing"
-outpath = r"D:\ITC\courseMaterial\module13GFM2\2015\code\STARS\processing\indexes"
-
-bandA='1'
-bandB='2'
-
-print('calculating NDI '+bandA+'-'+ bandB+"/"+bandA+'+'+ bandB)
-msg, err = run_script(["-3.5", "gdal_calc.py","-A", inpath+r"\raster.tif","--A_band="+bandA, "-B",inpath+r"\raster.tif","--B_band="+bandB,"--outfile="+outpath+r"\NDI"+bandA+"_"+bandB+".tif","--type=Float32",'--calc="((A-B)/(A+B))"'])
-if err: print(err)
-
+#6) My small function to write TIFF files
+def write_array_as_tiff(m, tifsrc, path_out, name):
+    rows = tifsrc.RasterXSize
+    cols = tifsrc.RasterYSize
+    prj_wkt = tifsrc.GetProjectionRef()
+    geotransform = tifsrc.GetGeoTransform()
+    driver = gdal.GetDriverByName('GTiff')
+    ds = driver.Create(path_out.format(name), rows, cols, 1, gdal.GDT_Float32)
+    ds.SetGeoTransform(geotransform)
+    ds.SetProjection(prj_wkt)
+    outband=ds.GetRasterBand(1)
+    outband.WriteArray(m)
+    ds = None
+    outband = None
 

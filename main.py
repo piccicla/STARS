@@ -44,12 +44,13 @@ setng['band_combinations'] = band_combinations
 setng['pixel_subset'] = pixel_subset = xxx["pixel_subset"]
 setng['NDI_chart_combinations'] = NDI_chart_combinations = eval(xxx["NDI_chart_combinations"])
 
-setng['hara_dir'] = hara_dir = xxx["hara_dir"]
-setng['haralick_format'] = haralick_format = eval(xxx["haralick_format"])
-setng['haralick_image_type'] = haralick_image_type =  eval(xxx["haralick_image_type"])
-setng['hara_ndi_dir'] = hara_ndi_dir = xxx["hara_ndi_dir"]
-setng['haralick_ndi_format'] = haralick_ndi_format =  eval(xxx["haralick_ndi_format"])
-setng['heralick_ndi_type'] = haralick_ndi_type =  eval(xxx["haralick_ndi_type"])
+#this is not necessary anymore because the haralick paths are in the json file now
+#setng['hara_dir'] = hara_dir = xxx["hara_dir"]
+#setng['haralick_format'] = haralick_format = eval(xxx["haralick_format"])
+#setng['haralick_image_type'] = haralick_image_type =  eval(xxx["haralick_image_type"])
+#setng['hara_ndi_dir'] = hara_ndi_dir = xxx["hara_ndi_dir"]
+#setng['haralick_ndi_format'] = haralick_ndi_format =  eval(xxx["haralick_ndi_format"])
+#setng['heralick_ndi_type'] = haralick_ndi_type =  eval(xxx["haralick_ndi_type"])
 
 setng['skll_dir'] = skll_dir = xxx["skll_dir"]
 setng['boruta_dir'] = boruta_dir = xxx["boruta_dir"]
