@@ -1,47 +1,68 @@
 # -*- coding: utf-8 -*-
 
+import csv
+import collections
 
-#1) Creating a big and empty raster, same as the original image
-m = np.zeros((1157, 1553))
+def get_structure(filepath):
+    ''' this function will read the structure of google engine files
+    the fist row contains the raster names
+    the second row contains many fields for each raster
+    :param filepath: path to the csv file
+    :return: on ordered dictionary  raster_name: field_count
+    '''
+
+    f = open (filepath)
+    reader = csv.reader(f)
+
+    first=next(reader)
+    #print(len(first))
+
+    uniquefirst=list(set(first))
+    #print(len(uniquefirst))
+
+    #sets are not ordered therefore I used the code below to get a unique list
+    uniquefirst = []
+    [uniquefirst.append(item) for item in first if item not in uniquefirst]
+    #print(len(uniquefirst)
+
+    #second=next(reader)
+    #print(len(second)))
+
+    #count how many columns for each first row fields
+    fieldcount = [first.count(uniquefirst[i]) for i in range(len(uniquefirst))]
+
+    #create a dictionary -> fist_row_name: column_counts
+    tablestructure = collections.OrderedDict(zip(uniquefirst, fieldcount))
+
+    images = list(tablestructure.keys())
+    prefix = []
+    [prefix.append(i.split('_')[0]) for i in images if i.split('_')[0] not in prefix ]
 
 
-#2) We fill the matrix with each ONE value found in each of the 45 little rasters, recycling variable m (defined in step 1)
+    return tablestructure
 
 
-if rastermask: #if we have a mask (e.g trees)
-    pixelmasker = pixelmask.ReadAsArray(xoff, yoff, xcount, ycount).astype(np.float)
-    datamask = datamask * pixelmasker
-    m = utility.fill_matrix(m, xoff, yoff, xcount, ycount, datamask)
+print(get_structure("data/train_kernel_1_v4.csv"))
 
-#3) The code of the filling function
-def fill_matrix(m, xoff, yoff, xcount, ycount, pixelmask):
-    # print("xoff: {0}, yoff: {1}, xcount: {2}, ycount: {3}".format(xoff, yoff, xcount, ycount))
-    for i in range(0, ycount):
-        for j in range(0, xcount):
-            if pixelmask[0, i, j] == 1:
-                m[i+yoff][j+xoff] = 1
-    return m
 
-#4) Change type of return of the function, by also returning the big raster with the selected pixels
+def filter_by_row(filepath, outputfile, rows_by_class):
+    ''' decrease the size of the file, for each class take no more than rows_by_class rows
+    if the class has less rows than rows_by_class output a warning text file
+    :param filepath: path to the csv file
+    :param outputfile: path to the output csv file
+    :param rows_by_class: the max number of returned rows for each class
+    :return: the filtered csv file; the first 2 rows are kept
+    '''
+    pass
 
-return (outdata, uniqueLabels, columnNames, m)
+def filter_by_column(filepath, outputfile, image_filter, field_filter):
+    '''
 
-#5) Getting this raster in the test file, then writing it to tiff
-data, uniqueLabels, columnNames, m = getPixelValues.getGeneralSinglePixelValues(path_shape, path_tif, label_col, [img_name], rastermask=path_mask, subset=None, returnsubset = False)
-utility.write_array_as_tiff(m, tif, path_out, name)
+    :param filepath: path to the csv file
+    :param outputfile: path to the output csv file
+    :param image_filter: list of images names? pass ['*'] for all images
+    :param field_filter:
 
-#6) My small function to write TIFF files
-def write_array_as_tiff(m, tifsrc, path_out, name):
-    rows = tifsrc.RasterXSize
-    cols = tifsrc.RasterYSize
-    prj_wkt = tifsrc.GetProjectionRef()
-    geotransform = tifsrc.GetGeoTransform()
-    driver = gdal.GetDriverByName('GTiff')
-    ds = driver.Create(path_out.format(name), rows, cols, 1, gdal.GDT_Float32)
-    ds.SetGeoTransform(geotransform)
-    ds.SetProjection(prj_wkt)
-    outband=ds.GetRasterBand(1)
-    outband.WriteArray(m)
-    ds = None
-    outband = None
-
+    :return:
+    '''
+    pass
