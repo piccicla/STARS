@@ -5,8 +5,6 @@ import collections
 import os
 import numpy as np
 
-#import fileIO
-
 #constants for bands, vegetation indexes, texture bands, texture vegetation indexes
 TYPES = ['b', 'vi', 'tb', 'tvi']
 
@@ -173,9 +171,9 @@ def filter_by_column(filepath, outputfile, image_filter = None, type_filter = No
                         'tvi': TEXTYPES }
 
     #if the filters for vi,tb,tvi are missing or empty take all
-    if 'vi' not in type_filter or not type_filter['vi']: type_filter['vi'] = VITYPES
-    if 'tb' not in type_filter or not type_filter['tb']: type_filter['tb'] = TEXTYPES
-    if 'tvi' not in type_filter or not type_filter['tvi']: type_filter['tvi'] = TEXTYPES
+    if 'vi' not in type_filter: type_filter['vi'] = VITYPES
+    if 'tb' not in type_filter: type_filter['tb'] = TEXTYPES
+    if 'tvi' not in type_filter : type_filter['tvi'] = TEXTYPES
 
 
     inp = open(filepath)
@@ -335,6 +333,9 @@ def filter_by_column(filepath, outputfile, image_filter = None, type_filter = No
     return [fields[i] for i in indexes], indexes, imagenames
 
 
+
+
+
 def splitinput(filepath, outdirectory, headerscount = 2, splitrows = 50):
     '''
     :param filepath:
@@ -389,10 +390,9 @@ def shuffle(directory, nfile):
 
 #filter_by_row("data/train_kernel_1_v4.csv","data/train_kernel_1_v4_fiteredrows.csv" ,1)
 
+##### infile = splitinput( "data/train_kernel_1_v4.csv", r"C:\Users\claudio\PycharmProjects\STARS\temp" )
+##### shuffle(r"C:\Users\claudio\PycharmProjects\STARS\temp", infile)
+
 #a = filter_by_column("data/train_kernel_1_v4_fiteredrows.csv", "data/train_kernel_1_v4_fiteredfeldsa.csv", None,type_filter={'b': ['b4'], 'vi': ['RVI', 'MSAVI2','NDI' ]})
 #b = filter_by_column("data/train_kernel_1_v4_fiteredrows.csv", "data/train_kernel_1_v4_fiteredfeldsb.csv", None,type_filter={'b': ['b4', 'b6', 'b8'], 'vi': ['RVI', 'MSAVI2','NDI' ]})
 #c = filter_by_column("data/train_kernel_1_v4_fiteredrows.csv", "data/train_kernel_1_v4_fiteredfeldsc.csv", ['054112895040_01'],type_filter={'b': ['b4','b6'], 'vi': ['RVI', 'MSAVI2', 'NDI'], 'tb':['corr','dent','diss'],'tvi':['imcorr2','inertia','prom']})
-
-
-#infile = splitinput( "data/train_kernel_1_v4.csv", r"C:\Users\claudio\PycharmProjects\STARS\temp" )
-#shuffle(r"C:\Users\claudio\PycharmProjects\STARS\temp", 41)
