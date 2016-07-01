@@ -2,15 +2,21 @@
 
 import csv
 import collections
-import fileIO
+import os
+import numpy as np
 
-#types to look for (bands, vegetation indexes, texture bands, texture vegetation indexes
+#import fileIO
+
+#constants for bands, vegetation indexes, texture bands, texture vegetation indexes
 TYPES = ['b', 'vi', 'tb', 'tvi']
+
+BANDS = ['b1','b2','b3','b4','b5','b6','b7','b8']
 
 VITYPES = ['DVI', 'NDI','RVI','SAVI','TCARI','EVI','MSAVI2']
 
+VTYPES_NOBAND = ['SAVI', 'TCARI', 'EVI', 'MSAVI2'] #types independent from bands
 
-TEXTYPES = []
+TEXTYPES = ['asm', 'contrast','corr','dent','diss','dvar','ent','idm','imcorr1','imcorr2','inertia','prom','savg','sent','shade','svar','var']
 
 
 def get_structure(filepath):
@@ -26,9 +32,6 @@ def get_structure(filepath):
 
     first=next(reader)
     #print(len(first))
-
-    uniquefirst=list(set(first))
-    #print(len(uniquefirst))
 
     #sets are not ordered therefore I used the code below to get a unique list
     uniquefirst = []
@@ -55,9 +58,10 @@ def get_structure(filepath):
 
 def field_names(filepath, outfile=None):
     '''
-    utility function to return field names
+    utility function to return unque field names from the second row,
     :param filepath:
-    :return:
+    :param outfile: set this if you want to output to a file
+    :return: a list of unique fields
     '''
 
     f = open (filepath)
@@ -83,7 +87,7 @@ def field_names(filepath, outfile=None):
 
 def write_filtered_row(inputrow,indexes, csvwriter):
     '''
-    filter a list and write to csv
+    utility function to filter a list and write it to csv
     :param inputrow:  the full input list
     :param indexes: the filter indexes
     :param csvwriter: the csv writer
@@ -96,7 +100,7 @@ def write_filtered_row(inputrow,indexes, csvwriter):
 
 def filter_by_row(filepath, outputfile, rows_by_class=100):
     ''' decrease the size of the file, for each class take no more than rows_by_class rows
-    if the class has less rows than rows_by_class output a warning text file
+    the function print the numer of pixels for each class
     :param filepath: path to the csv file
     :param outputfile: path to the output csv file
     :param rows_by_class: the max number of returned rows for each class
@@ -136,23 +140,46 @@ def filter_by_row(filepath, outputfile, rows_by_class=100):
 
     print('\nresults: ',countpix)
 
+def filter_by_column(filepath, outputfile, image_filter = None, type_filter = None, default_indexes = 2):
+    ''' Filter the google engine files by field and output a new csv
 
-def filter_by_column(filepath, outputfile, image_filter = None, type_filter = [], subtype_filter=[], default_indexes = [0,1]):
-    '''
+    type_filter =
+    { 'b' : ['b1','b2','b3','b4','b5','b6','b7','b8'],
+      'vi': ['DVI', 'NDI', 'RVI', 'SAVI', 'TCARI', 'EVI', 'MSAVI2']
+      'tb': ['asm', 'contrast','corr','dent','diss','dvar','ent','idm','imcorr1','imcorr2','inertia','prom','savg','sent','shade','svar','var']
+      'tvi': ['asm', 'contrast','corr','dent','diss','dvar','ent','idm','imcorr1','imcorr2','inertia','prom','savg','sent','shade','svar','var']
+    }
+
     :param filepath: path to the csv file
     :param outputfile: path to the output csv file
     :param image_filter: list of images names; pass None for all images
-    :param type_filter: list of types to filter, possible names are in TYPES
-    :param subtype_filter: list with subtype filters
-    :param default_indexes: fields that contains the ids and must be in the output
+    :param type_filter: dictionary of types and subtypes to filter, possible names are in TYPES,VITYPES,VITYPES, TEXTYPES
+    if no subfilter is needed leave the key empty   e.g. 'b':{}
+    :param default_indexes: the number of left columns with the indexes
 
-    :return:
+    :return:  list of output field names, indexes of field names, list of output imagenames
     '''
+
+    #if no image and filter is specified exit
+    if not image_filter and not type_filter:
+        print('please, specify and image filter and/or a type filter')
+        return
+
+    #if the image is specified but not the filter take all for the image
+    elif not type_filter:
+        type_filter = { 'b' : BANDS,
+                        'vi': VITYPES,
+                        'tb': TEXTYPES,
+                        'tvi': TEXTYPES }
+
+    #if the filters for vi,tb,tvi are missing or empty take all
+    if 'vi' not in type_filter or not type_filter['vi']: type_filter['vi'] = VITYPES
+    if 'tb' not in type_filter or not type_filter['tb']: type_filter['tb'] = TEXTYPES
+    if 'tvi' not in type_filter or not type_filter['tvi']: type_filter['tvi'] = TEXTYPES
 
 
     inp = open(filepath)
     reader = csv.reader(inp)
-
     out = open(outputfile, 'w', newline='')
     writer = csv.writer(out)
 
@@ -165,21 +192,19 @@ def filter_by_column(filepath, outputfile, image_filter = None, type_filter = []
     images = list(tablestructure.keys())
     counts = list(tablestructure.values())
 
-
     #this will store the field indexes
-    indexes= default_indexes+ []
+    indexes = list(range(default_indexes))+ []
     imagenames=[]
-    for i in range(len(default_indexes)): imagenames.append('ID_'+str(i))
-
+    # add indexes as first fields
+    for i in range(default_indexes): imagenames.append('ID_'+str(i))
 
     for n,image in enumerate(images):
 
         image_name = image.split('_')[-3]+'_'+ image.split('_')[-2]
 
-        if not image_filter or (image_filter and image_name in image_filter):
+        if not image_filter or (image_filter and image_name in image_filter): #define wich images, all or some?
 
             #get the number of fields for this image
-
             offset = 0
             for i in range(n):
                 offset += counts[i]
@@ -193,35 +218,99 @@ def filter_by_column(filepath, outputfile, image_filter = None, type_filter = []
                 #split the field name
                 splitted = fields[j].split('_')
 
-                for t in type_filter:
+                for t in type_filter: #itrate the dictionary
 
                     if t in TYPES:
 
                         if t=='b':
                             if fields[j].startswith('b') and len(splitted)== 1:
-                                indexes.append(j)
-                                imagenames.append(image_name)
-                                # TODO additional filter for band number
+
+                                if type_filter[t]: #check subtype
+                                    if splitted[0] in type_filter[t]:
+                                        indexes.append(j)
+                                        imagenames.append(image_name)
+                                else: #no subtype, take all
+                                    indexes.append(j)
+                                    imagenames.append(image_name)
+                                    # TODO additional filter for band number
 
                         elif t=='vi':
 
-                            if splitted[0].upper() in VITYPES and (len(splitted)<= 3) :
-                                indexes.append(j)
-                                imagenames.append(image_name)
-                                #TODO additional filter for subtype
+                            if splitted[0].upper() in VITYPES and (len(splitted)<= 3) : #check this field is ok
+
+                                for tf in type_filter[t]:
+
+                                    if tf.upper() == splitted[0].upper():
+
+                                        if type_filter['b']: #check if there is a subfilter
+
+                                            if tf in VTYPES_NOBAND: #check this is a special vi
+                                                indexes.append(j)
+                                                imagenames.append(image_name)
+                                                break
+
+                                            else: #if not special,
+                                                if len(type_filter['b'])>1:  #check there are band combinations
+                                                    bandcombination = 0
+                                                    for bb in type_filter['b']:
+                                                        if bb in fields[j]: bandcombination +=1
+                                                    if bandcombination == 2:
+                                                        indexes.append(j)
+                                                        imagenames.append(image_name)
+                                                        break
+
+                                        else:  #type_filter['b']
+                                            indexes.append(j)
+                                            imagenames.append(image_name)
+
 
                         elif t=='tb':
 
                             if fields[j].startswith('b') and len(splitted) > 1:
-                                indexes.append(j)
-                                imagenames.append(image_name)
-                                # TODO additional filter for subtype
 
-                        elif t=='tvi':
-                            if splitted[0].upper() in VITYPES and (len(splitted) >= 4):
-                                indexes.append(j)
-                                imagenames.append(image_name)
-                                # TODO additional filter for subtype
+                                for tf in type_filter[t]:
+
+                                    if tf.upper() == splitted[1].upper(): #look for the filter
+
+                                        if type_filter['b']:  # check if there is a subfilter
+
+                                            for bb in type_filter['b']:
+                                                if bb in fields[j]:
+                                                    indexes.append(j)
+                                                    imagenames.append(image_name)
+
+                                        else:  # noband filter
+                                            indexes.append(j)
+                                            imagenames.append(image_name)
+
+                        elif t == 'tvi':
+
+                            if splitted[0].upper() in VITYPES and (len(splitted) >= 4) and (splitted[0].upper() in type_filter['vi']):
+
+                                for tf in type_filter[t]:
+
+                                    if tf.upper() == splitted[3].upper() or tf.upper() == splitted[1].upper():
+
+                                        if type_filter['b']: #check if there is a subfilter
+
+                                            if tf in VTYPES_NOBAND: #check this is a special vi
+                                                indexes.append(j)
+                                                imagenames.append(image_name)
+                                                break
+
+                                            else: #if not special,
+                                                if len(type_filter['b'])>1:  #check there are band combinations
+                                                    bandcombination = 0
+                                                    for bb in type_filter['b']:
+                                                        if bb in splitted: bandcombination +=1
+                                                    if bandcombination == 2:
+                                                        indexes.append(j)
+                                                        imagenames.append(image_name)
+                                                        break
+
+                                        else:
+                                            indexes.append(j)
+                                            imagenames.append(image_name)
 
                     else:
                         print('type_filter should be:  b vi tb tvi ')
@@ -245,44 +334,65 @@ def filter_by_column(filepath, outputfile, image_filter = None, type_filter = []
 
     return [fields[i] for i in indexes], indexes, imagenames
 
+
+def splitinput(filepath, outdirectory, headerscount = 2, splitrows = 50):
+    '''
+    :param filepath:
+    :param outdirectory: absollute path for temporary directory
+    :param splitrows: number of rows for each out file
+    :return:
+    '''
+
+    if not os.path.exists(outdirectory):
+        os.mkdir(outdirectory)
+
+    f = open(filepath)
+
+    #write file with only headers
+    h = open(outdirectory + '/0_tmp', 'w')
+    for i in range(headerscount):
+        h.write(next(f))
+    h.close()
+
+    #split file into multiple files
+    g = None
+    nfile = 1
+    try:
+        while(True):
+            counter = 0
+            g = open(outdirectory + '/' + str(nfile) +'_tmp', 'w')
+            while counter < splitrows:
+                row = next(f)
+                if row[0] != ',' : g.write(row)
+                counter+=1
+            g.flush()
+            g.close()
+            nfile += 1
+
+    except StopIteration as e:
+        if g and not g.closed: g.close()
+
+    if f and not f.closed: f.close()
+
+    return nfile
+
+def shuffle(directory, nfile):
+    for i in (1,nfile):
+        arr = np.loadtxt(directory + '/' + str(i) + '_tmp', delimiter=',')
+        print('shuffling file '+str(i))
+        np.random.shuffle(arr)
+        arr.tofile(directory + '/' + str(i) + '_tmp', sep=",", format="%.16f")
+
+
+###############################################TESTS############################
 #print(get_structure("data/train_kernel_1_v4.csv"))
 
 #filter_by_row("data/train_kernel_1_v4.csv","data/train_kernel_1_v4_fiteredrows.csv" ,1)
 
-#a = filter_by_column("data/train_kernel_1_v4_fiteredrows.csv", "data/train_kernel_1_v4_fiteredfelds.csv", ['*'], ['b'])
-#fileIO.save_object('data/filteredbyband',a)
+#a = filter_by_column("data/train_kernel_1_v4_fiteredrows.csv", "data/train_kernel_1_v4_fiteredfeldsa.csv", None,type_filter={'b': ['b4'], 'vi': ['RVI', 'MSAVI2','NDI' ]})
+#b = filter_by_column("data/train_kernel_1_v4_fiteredrows.csv", "data/train_kernel_1_v4_fiteredfeldsb.csv", None,type_filter={'b': ['b4', 'b6', 'b8'], 'vi': ['RVI', 'MSAVI2','NDI' ]})
+#c = filter_by_column("data/train_kernel_1_v4_fiteredrows.csv", "data/train_kernel_1_v4_fiteredfeldsc.csv", ['054112895040_01'],type_filter={'b': ['b4','b6'], 'vi': ['RVI', 'MSAVI2', 'NDI'], 'tb':['corr','dent','diss'],'tvi':['imcorr2','inertia','prom']})
 
 
-'''
-a = filter_by_column("data/train_kernel_1_v4.csv", "data/train_kernel_1_v4_fiteredfelds.csv", ['*'], ['b'])
-fileIO.save_object('data/filteredbyband',a)
-b = filter_by_column("data/train_kernel_1_v4.csv", "data/train_kernel_1_v4_fiteredfelds.csv", ['*'], ['vi'])
-fileIO.save_object('data/filteredbyvi',b)
-c = filter_by_column("data/train_kernel_1_v4.csv", "data/train_kernel_1_v4_fiteredfelds.csv", ['*'], ['tb'])
-fileIO.save_object('data/filteredbytb',c)
-d = filter_by_column("data/train_kernel_1_v4.csv", "data/train_kernel_1_v4_fiteredfelds.csv", ['*'], ['tvi'])
-fileIO.save_object('data/filteredbytvi',d)
-
-e = filter_by_column("data/train_kernel_1_v4.csv", "data/train_kernel_1_v4_fiteredfelds.csv", ['*'], ['b','vi'])
-fileIO.save_object('data/filteredbyband_vi',e)
-f = filter_by_column("data/train_kernel_1_v4.csv", "data/train_kernel_1_v4_fiteredfelds.csv", ['*'], ['b','tb'])
-fileIO.save_object('data/filteredbyband_tb',f)
-g = filter_by_column("data/train_kernel_1_v4.csv", "data/train_kernel_1_v4_fiteredfelds.csv", ['*'], ['b','tvi'])
-fileIO.save_object('data/filteredbyband_tvi',g)
-
-
-h = filter_by_column("data/train_kernel_1_v4.csv", "data/train_kernel_1_v4_fiteredfelds.csv", ['*'], ['vi','tb'])
-fileIO.save_object('data/filteredbyvi_tb',h)
-i = filter_by_column("data/train_kernel_1_v4.csv", "data/train_kernel_1_v4_fiteredfelds.csv", ['*'], ['vi','tvi'])
-fileIO.save_object('data/filteredbyvi_tvi',i)
-
-j = filter_by_column("data/train_kernel_1_v4.csv", "data/train_kernel_1_v4_fiteredfelds.csv", ['*'], ['b','vi','tb'])
-fileIO.save_object('data/filteredbyb_vi_tb',j)
-
-k = filter_by_column("data/train_kernel_1_v4.csv", "data/train_kernel_1_v4_fiteredfelds.csv", ['*'], ['vi','tb','tvi'])
-fileIO.save_object('data/filteredbyvi_tb_tvi',k)
-'''
-
-
-a = filter_by_column("data/train_kernel_1_v4.csv", "data/train_kernel_1_v4_fiteredfelds.csv", ['054112895010_01'], ['b'])
-fileIO.save_object('data/filteredbyband',a)
+#infile = splitinput( "data/train_kernel_1_v4.csv", r"C:\Users\claudio\PycharmProjects\STARS\temp" )
+#shuffle(r"C:\Users\claudio\PycharmProjects\STARS\temp", 41)
