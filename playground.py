@@ -171,6 +171,7 @@ def filter_by_column(filepath, outputfile, image_filter = None, type_filter = No
                         'tvi': TEXTYPES }
 
     #if the filters for vi,tb,tvi are missing or empty take all
+    if 'b' not in type_filter: type_filter['b'] = BANDS
     if 'vi' not in type_filter: type_filter['vi'] = VITYPES
     if 'tb' not in type_filter: type_filter['tb'] = TEXTYPES
     if 'tvi' not in type_filter : type_filter['tvi'] = TEXTYPES
