@@ -464,4 +464,4 @@ def shuffle(directory, nfile):
 #e = filter_by_column("data/train_kernel_1_v4.csv", "data/train_kernel_1_v4_fiteredfieldse.csv",type_filter={'b': ['b4'], 'vi': ['RVI', 'MSAVI2','NDI' ]})
 
 #f = filter_by_column("data/train_kernel_1_v4.csv", "data/train_kernel_1_v4_fiteredfieldsf.csv", type_filter={'b': ['b4', 'b6', 'b8'], 'vi': ['RVI', 'MSAVI2','NDI' ]})
-g = filter_by_column("data/train_kernel_1_v4.csv", "data/train_kernel_1_v4_fiteredfieldsg.csv", ['054112895040_01'],type_filter={'b': ['b4','b6'], 'vi': ['RVI', 'MSAVI2', 'NDI'], 'tb':['corr','dent','diss'],'tvi':['imcorr2','inertia','prom']})
+#g = filter_by_column("data/train_kernel_1_v4.csv", "data/train_kernel_1_v4_fiteredfieldsg.csv", ['054112895040_01'],type_filter={'b': ['b4','b6'], 'vi': ['RVI', 'MSAVI2', 'NDI'], 'tb':['corr','dent','diss'],'tvi':['imcorr2','inertia','prom']})
