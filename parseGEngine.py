@@ -145,7 +145,7 @@ def filter_by_row(filepath, outputfile, rows_by_class=100):
     print('\nresults: ',countpix)
 
 
-def filter_by_column(filepath, outputfile, image_filter = None, type_filter = None, default_indexes = 2):
+def filter_by_column(filepath, outputfile, image_filter = None, type_filter = None, default_indexes = 2, linked = True):
     """ Filter the google engine files by field and output a new csv
 
     type_filter =
@@ -188,45 +188,86 @@ def filter_by_column(filepath, outputfile, image_filter = None, type_filter = No
     if 'tb' in type_filter and not type_filter['tb']: type_filter['tb'] = TEXTYPES
     if 'tvi' in type_filter and not type_filter['tvi']: type_filter['tvi'] = TEXTYPES
 
-    if 'tvi' in type_filter and 'vi' not in type_filter:
-        print('to get the "tvi" you need to specify the "vi"')
-        return
-
-
     inp = open(filepath)
     reader = csv.reader(inp)
     out = open(outputfile, 'w', newline='')
     writer = csv.writer(out)
 
-    #access field row
-    next(reader) #first row with image names
+    # access field row
+    next(reader)  # first row with image names
     fields = next(reader)
 
-    #get a tuple with an ordered dictionary {raster_name: field_count} and a set with the unique raster names
+    # define the indexes to filter the csv rows
+    if linked:
+        a = linked_iteration(filepath,image_filter, type_filter,default_indexes, fields)
+    else:
+        a = standard_iteration(filepath,image_filter, type_filter,default_indexes, fields)
+
+    if not a:
+        print('try again!')
+        return
+
+    imagenames = a[0]
+    indexes = a[1]
+
+    # write filtered headers
+    writer.writerow(imagenames)
+    write_filtered_row(fields, indexes, writer)
+    # write filtered rows
+    print('filtering lines')
+    for line in reader:
+        if not line[0]:
+            continue  # skip empty lines
+        write_filtered_row(line, indexes, writer)
+
+    inp.close()
+    out.close()
+
+    print('done')
+
+    return [fields[i] for i in indexes], indexes, imagenames
+
+def linked_iteration(filepath,image_filter, type_filter,default_indexes, fields):
+    """  define the imagenames and indexes for the output using linked types
+         the vegetation index output depends on the chosen bands,
+         the texture bands depend on the chosen bands
+         the texture vegetation indexes depend on the chosen bands and chosen vindex
+    :param filepath: the input google engine csv file
+    :param image_filter: list of image names or None for all the images
+    :param type_filter: dictionary for the filter
+    :param default_indexes: the left columns that stores the row indexes
+    :param fields: the list of all fields (coming from the second csv row)
+    :return: list of imagenames and list of filter indexes
+    """
+
+    if 'tvi' in type_filter and 'vi' not in type_filter:
+        print('to get the "tvi" you need to specify the "vi"')
+        return
+
+    # get a tuple with an ordered dictionary {raster_name: field_count} and a set with the unique raster names
     tablestructure = get_structure(filepath)
 
     images = list(tablestructure[0].keys())
     counts = list(tablestructure[0].values())
 
-    #this will store the field indexes
+    # this will store the field indexes
     indexes = list(range(default_indexes))+ []
     imagenames=[]
     # add indexes as first fields
-    for i in range(default_indexes): imagenames.append('ID_'+str(i))
-
+    for i in range(default_indexes): imagenames.append('id_'+str(i))
 
     for n,image in enumerate(images):
 
         image_name = image.split('_')[-3]+'_'+ image.split('_')[-2]
 
-        if not image_filter or (image_filter and (image_name in image_filter)): #define wich images, all or some?
+        if not image_filter or (image_filter and (image_name in image_filter)): # define wich images, all or some?
 
-            #get the number of fields for this image
+            # get the number of fields for this image
             offset = 0
             for i in range(n):
                 offset += counts[i]
 
-            #print(offset)
+            # print(offset)
 
             field_count = tablestructure[0][image]
 
@@ -235,14 +276,14 @@ def filter_by_column(filepath, outputfile, image_filter = None, type_filter = No
                 #split the field name
                 splitted = fields[j].split('_')
 
-                for t in type_filter: #iterate the filter dictionary
+                for t in type_filter: # iterate the filter dictionary
 
                     if t in TYPES:
 
                         if t == 'b':
                             if fields[j].startswith('b') and len(splitted) == 1:
 
-                                if type_filter[t]: #check subtype
+                                if type_filter[t]: # check subtype
                                     if splitted[0] in type_filter[t]:
                                         indexes.append(j)
                                         imagenames.append(image_name)
@@ -330,25 +371,99 @@ def filter_by_column(filepath, outputfile, image_filter = None, type_filter = No
                     else:
                         print('type_filter should be:  b vi tb tvi ')
                         print('type_filter should be: ' + str(VITYPES))
-                        print('try again!')
                         return
 
-    # write filtered headers
-    writer.writerow(imagenames)
-    write_filtered_row(fields, indexes, writer)
-    # write filtered rows
-    print('filtering lines')
-    for line in reader:
-        if not line[0]:
-            continue  # skip empty lines
-        write_filtered_row(line, indexes, writer)
+    return imagenames, indexes
 
-    inp.close()
-    out.close()
+def standard_iteration(filepath,image_filter, type_filter,default_indexes, fields):
 
-    print('done')
+    """  define the imagenames and indexes for the output using linked types
+         the filters are independent, for linked filters use the function linked_iteration()
+    :param filepath: the input google engine csv file
+    :param image_filter: list of image names or None for all the images
+    :param type_filter: dictionary for the filter
+    :param default_indexes: the left columns that stores the row indexes
+    :param fields: the list of all fields (coming from the second csv row)
+    :return: list of imagenames and list of filter indexes
+    """
 
-    return [fields[i] for i in indexes], indexes, imagenames
+    # get a tuple with an ordered dictionary {raster_name: field_count} and a set with the unique raster names
+    tablestructure = get_structure(filepath)
+
+    images = list(tablestructure[0].keys())
+    counts = list(tablestructure[0].values())
+
+    # this will store the field indexes
+    indexes = list(range(default_indexes)) + []
+    imagenames = []
+    # add indexes as first fields
+    for i in range(default_indexes): imagenames.append('id_' + str(i))
+
+    for n, image in enumerate(images):
+
+        image_name = image.split('_')[-3] + '_' + image.split('_')[-2]
+
+        if not image_filter or (image_filter and (image_name in image_filter)):  # define wich images, all or some?
+
+            # get the number of fields for this image
+            offset = 0
+            for i in range(n):
+                offset += counts[i]
+
+            # print(offset)
+
+            field_count = tablestructure[0][image]
+
+            for j in range(offset, offset + field_count):
+
+                # split the field name
+                splitted = fields[j].split('_')
+
+                for t in type_filter:  # iterate the filter dictionary
+
+                    if t in TYPES:
+
+                        if t == 'b':
+                            if fields[j].startswith('b') and len(splitted) == 1:
+                                if type_filter[t]:  # check subtype
+                                    if splitted[0] in type_filter[t]:
+                                        indexes.append(j)
+                                        imagenames.append(image_name)
+                                else:  # no subtype, take all
+                                    indexes.append(j)
+                                    imagenames.append(image_name)
+
+                        elif t == 'vi':
+
+                            if splitted[0].upper() in VITYPES and (len(splitted) <= 3):  # check this field is ok
+
+                                for tf in type_filter[t]:
+                                    if tf.upper() == splitted[0].upper():
+                                        indexes.append(j)
+                                        imagenames.append(image_name)
+
+                        elif t == 'tb':
+
+                            if fields[j].startswith('b') and len(splitted) > 1:
+                                for tf in type_filter[t]:
+                                    if tf.upper() == splitted[1].upper():  # look for the filter
+                                            indexes.append(j)
+                                            imagenames.append(image_name)
+
+                        elif t == 'tvi':
+
+                            if splitted[0].upper() in VITYPES and (len(splitted) >= 4):
+                                for tf in type_filter[t]:
+                                    if tf.upper() == splitted[3].upper() or tf.upper() == splitted[1].upper():
+                                            indexes.append(j)
+                                            imagenames.append(image_name)
+
+                    else:
+                        print('type_filter should be:  b vi tb tvi ')
+                        print('type_filter should be: ' + str(VITYPES))
+                        return
+
+    return imagenames, indexes
 
 
 def splitinput(filepath, outdirectory, headerscount = 2, splitrows = 50):
@@ -410,58 +525,130 @@ def shuffle(directory, nfile):
 ##### shuffle(r"C:\Users\claudio\PycharmProjects\STARS\temp", infile)
 
 
+############ same results
 # 1 image,all bands
 #a = filter_by_column("data/train_kernel_1_v4.csv", "data/train_kernel_1_v4_fiteredfieldsAa.csv", ['054112895040_01'],type_filter={'b': []})
+#a = filter_by_column("data/train_kernel_1_v4.csv", "data/train_kernel_1_v4_fiteredfieldsAa_nolink.csv", ['054112895040_01'],type_filter={'b': []}, linked=False)
+##################### same results
 # all images, all bands
 #aa = filter_by_column("data/train_kernel_1_v4.csv", "data/train_kernel_1_v4_fiteredfieldsAaa.csv",type_filter={'b': []})
-
+#aa = filter_by_column("data/train_kernel_1_v4.csv", "data/train_kernel_1_v4_fiteredfieldsAaa_nolink.csv",type_filter={'b': []},linked=False)
+################ same results
 # 1 image, 2 bands
 #aaa = filter_by_column("data/train_kernel_1_v4.csv", "data/train_kernel_1_v4_fiteredfieldsAaaa.csv", ['054112895040_01'],type_filter={'b': ['b3','b4']})
+#aaa = filter_by_column("data/train_kernel_1_v4.csv", "data/train_kernel_1_v4_fiteredfieldsAaaa_nolink.csv", ['054112895040_01'],type_filter={'b': ['b3','b4']}, linked=False)
+################## same results
 # all images, 2 bands
 #aaaa = filter_by_column("data/train_kernel_1_v4.csv", "data/train_kernel_1_v4_fiteredfieldsAaaaa.csv",type_filter={'b': ['b3','b4']})
+#aaaa = filter_by_column("data/train_kernel_1_v4.csv", "data/train_kernel_1_v4_fiteredfieldsAaaaa_nolink.csv",type_filter={'b': ['b3','b4']}, linked=False)
 
+######################## same results
 # 1 image, all vegindex
 #b = filter_by_column("data/train_kernel_1_v4.csv", "data/train_kernel_1_v4_fiteredfieldsB.csv",['054112895040_01'],type_filter={'vi': []})
+#b = filter_by_column("data/train_kernel_1_v4.csv", "data/train_kernel_1_v4_fiteredfieldsB_nolink.csv",['054112895040_01'],type_filter={'vi': []}, linked=False)
+
+############################################### different results
 # all images, 1 band, all vegindex ( only the general indexes, the vi with band combinations are not outputed)
 #bb = filter_by_column("data/train_kernel_1_v4.csv", "data/train_kernel_1_v4_fiteredfieldsBbb.csv",type_filter={'b': ['b3'], 'vi': []})
+# all images, 1 band, all vegindex
+#bb = filter_by_column("data/train_kernel_1_v4.csv", "data/train_kernel_1_v4_fiteredfieldsBbb_nolink.csv",type_filter={'b': ['b3'], 'vi': []}, linked=False)
+
+####################################################################### different results
 # all images, 2 band, all vegindex (general indexes + the vi with the 2 band combinations are outputed )
 #bbb = filter_by_column("data/train_kernel_1_v4.csv", "data/train_kernel_1_v4_fiteredfieldsBbbb.csv",type_filter={'b': ['b3','b6'], 'vi': []})
+# all images, 2 bands, all vegindex
+#bbb = filter_by_column("data/train_kernel_1_v4.csv", "data/train_kernel_1_v4_fiteredfieldsBbbb_nolink.csv",type_filter={'b': ['b3','b6'], 'vi': []}, linked=False)
 
+##################################### same results
 #all images, savi index
 #bbbb = filter_by_column("data/train_kernel_1_v4.csv", "data/train_kernel_1_v4_fiteredfieldsBbbbb.csv",type_filter={'vi': ['SAVI']})
+#bbbb = filter_by_column("data/train_kernel_1_v4.csv", "data/train_kernel_1_v4_fiteredfieldsBbbbb_nolink.csv",type_filter={'vi': ['SAVI']}, linked=False)
+
+################################# same results
 #1 image, savi index
 #bbbbb = filter_by_column("data/train_kernel_1_v4.csv", "data/train_kernel_1_v4_fiteredfieldsBbbbbb.csv",['054112895040_01'],type_filter={'vi': ['SAVI']})
-#1 image, savi 1 index
+#bbbbb = filter_by_column("data/train_kernel_1_v4.csv", "data/train_kernel_1_v4_fiteredfieldsBbbbbb_nolink.csv",['054112895040_01'],type_filter={'vi': ['SAVI']}, linked=False)
+
+################################# same results
+#1 image, NDI index
 #bbbbbb = filter_by_column("data/train_kernel_1_v4.csv", "data/train_kernel_1_v4_fiteredfieldsBbbbbbb.csv",['054112895040_01'],type_filter={'vi': ['NDI']})
+# 1 image, NDI index
+#bbbbbb = filter_by_column("data/train_kernel_1_v4.csv", "data/train_kernel_1_v4_fiteredfieldsBbbbbbb_nolink.csv",['054112895040_01'],type_filter={'vi': ['NDI']}, linked=False)
 
-#1 image, 2 band combination, NDI index( only the 2 band combinations)
+############################### different results
+#1 image, 2 bands, NDI index( only the 2 band combinations)
 #bbbbbbb = filter_by_column("data/train_kernel_1_v4.csv", "data/train_kernel_1_v4_fiteredfieldsBbbbbbbb.csv",['054112895040_01'],type_filter={'b': ['b2','b7'],'vi': ['NDI']})
+#1 image, 2 bands, all NDI index
+#bbbbbbb = filter_by_column("data/train_kernel_1_v4.csv", "data/train_kernel_1_v4_fiteredfieldsBbbbbbbb_nolink.csv",['054112895040_01'],type_filter={'b': ['b2','b7'],'vi': ['NDI']}, linked=False)
 
+####################################### same results
 #1 image, all texture bands
 #c = filter_by_column("data/train_kernel_1_v4.csv", "data/train_kernel_1_v4_fiteredfieldsC.csv",['054112895040_01'],type_filter={'tb': []})
+# 1 image, all texture bands
+#c = filter_by_column("data/train_kernel_1_v4.csv", "data/train_kernel_1_v4_fiteredfieldsC_nolink.csv",['054112895040_01'],type_filter={'tb': []}, linked=False)
+
+######################################### same results
 #all images, all texture bands
 #c1 = filter_by_column("data/train_kernel_1_v4.csv", "data/train_kernel_1_v4_fiteredfieldsC1.csv",type_filter={'tb': []})
+# all images, all texture bands
+#c1 = filter_by_column("data/train_kernel_1_v4.csv", "data/train_kernel_1_v4_fiteredfieldsC1_nolink.csv",type_filter={'tb': []}, linked=False)
 
+########################################## same results
 #1 image, all texture bands
 #cc = filter_by_column("data/train_kernel_1_v4.csv", "data/train_kernel_1_v4_fiteredfieldsCc.csv",['054112895040_01'],type_filter={'tb': ['diss','dvar']})
+#1 image, all texture bands
+#cc = filter_by_column("data/train_kernel_1_v4.csv", "data/train_kernel_1_v4_fiteredfieldsCc_nolink.csv",['054112895040_01'],type_filter={'tb': ['diss','dvar']}, linked=False)
 
-#1 image, 1 band, 2 textures (for the the band)
+###################################### different results
+# #1 image, 1 band, 2 textures (for the the single band)
 #ccc = filter_by_column("data/train_kernel_1_v4.csv", "data/train_kernel_1_v4_fiteredfieldsCcc.csv",['054112895040_01'],type_filter={'b': ['b5'],'tb': ['diss','dvar']})
+#1 image, 1 band, 2 textures (for all the band)
+#ccc = filter_by_column("data/train_kernel_1_v4.csv", "data/train_kernel_1_v4_fiteredfieldsCcc_nolink.csv",['054112895040_01'],type_filter={'b': ['b5'],'tb': ['diss','dvar']}, linked=False)
+
+######################################## different results
 #all images, 1 band, 2 textures (for the the band)
 #cccc = filter_by_column("data/train_kernel_1_v4.csv", "data/train_kernel_1_v4_fiteredfieldsCccc.csv",type_filter={'b': ['b5'],'tb': ['diss','dvar']})
+#all images, 1 band, 2 textures (for all the bands)
+#cccc = filter_by_column("data/train_kernel_1_v4.csv", "data/train_kernel_1_v4_fiteredfieldsCccc_nolink.csv",type_filter={'b': ['b5'],'tb': ['diss','dvar']}, linked=False)
 
-
+######################################## different results
 #this will return None because the vi is not specified
 #d = filter_by_column("data/train_kernel_1_v4.csv", "data/train_kernel_1_v4_fiteredfieldsD.csv",['054112895040_01'],type_filter={'tvi': []})
-# 1 image, vi and tvi for all band combinations
+#this will return all tvi
+#d = filter_by_column("data/train_kernel_1_v4.csv", "data/train_kernel_1_v4_fiteredfieldsD_nolink.csv",['054112895040_01'],type_filter={'tvi': []}, linked=False)
+
+######################################### different results
+# 1 image, vi for all band combinations, tvi for NDI
 #dd = filter_by_column("data/train_kernel_1_v4.csv", "data/train_kernel_1_v4_fiteredfieldsDd.csv",['054112895040_01'],type_filter={'vi':['NDI'],'tvi': ['diss']})
+# 1 image, vi and tvi for all band combinations
+#dd = filter_by_column("data/train_kernel_1_v4.csv", "data/train_kernel_1_v4_fiteredfieldsDd_nolink.csv",['054112895040_01'],type_filter={'vi':['NDI'],'tvi': ['diss']}, linked=False)
 
+#################################different results
+#1 image, 2 bands, vi for 2 bands combinations, tvi for ndvi and 2 bands combinations
 #ddd = filter_by_column("data/train_kernel_1_v4.csv", "data/train_kernel_1_v4_fiteredfieldsDdd.csv",['054112895040_01'],type_filter={'b':['b5','b2'], 'vi':['NDI'],'tvi': ['diss']})
+#1 image, 2 bands, all vi NDI, all tvi diss
+#ddd = filter_by_column("data/train_kernel_1_v4.csv", "data/train_kernel_1_v4_fiteredfieldsDdd_nolink.csv",['054112895040_01'],type_filter={'b':['b5','b2'], 'vi':['NDI'],'tvi': ['diss']}, linked=False)
+
+##################################different results
+#1 image, 2 bands, NDI for 2 bands combinations + MSAVI2, tvi for the 2 vi and 2 band combinations, tb for 2 band combinations
 #ddd = filter_by_column("data/train_kernel_1_v4.csv", "data/train_kernel_1_v4_fiteredfieldsDdd.csv",['054112895040_01'],type_filter={'b':['b5','b2'], 'vi':['NDI','MSAVI2'],'tvi': ['diss', 'corr'], 'tb':['inertia','prom']})
+#1 image, 2 bands, NDI for all bands combinations + MSAVI2, tvi for  all vi and all band combinations, tb for all band combinations
+#ddd = filter_by_column("data/train_kernel_1_v4.csv", "data/train_kernel_1_v4_fiteredfieldsDdd_nolink.csv",['054112895040_01'],type_filter={'b':['b5','b2'], 'vi':['NDI','MSAVI2'],'tvi': ['diss', 'corr'], 'tb':['inertia','prom']}, linked=False)
 
-
-#rvi and ndi are not outpued because they need a band combination
+#################################################different results
+#all images, 1 band ,rvi and ndi are not outputed because they need a band combination
 #e = filter_by_column("data/train_kernel_1_v4.csv", "data/train_kernel_1_v4_fiteredfieldse.csv",type_filter={'b': ['b4'], 'vi': ['RVI', 'MSAVI2','NDI' ]})
+#all images, 1 band , vi for all band combinations
+#e = filter_by_column("data/train_kernel_1_v4.csv", "data/train_kernel_1_v4_fiteredfieldse_nolink.csv",type_filter={'b': ['b4'], 'vi': ['RVI', 'MSAVI2','NDI' ]}, linked=False)
 
+################################################different results
+#all images, 3 bands, vi for 3 band combinations
 #f = filter_by_column("data/train_kernel_1_v4.csv", "data/train_kernel_1_v4_fiteredfieldsf.csv", type_filter={'b': ['b4', 'b6', 'b8'], 'vi': ['RVI', 'MSAVI2','NDI' ]})
+#all images, 3 bands, vi for all band combinations
+#f = filter_by_column("data/train_kernel_1_v4.csv", "data/train_kernel_1_v4_fiteredfieldsf_nolink.csv", type_filter={'b': ['b4', 'b6', 'b8'], 'vi': ['RVI', 'MSAVI2','NDI' ]}, linked=False)
+
+################################################ different results
+#1 image, 2 bands, vi for the 2 band combinations, tb for the 2 band combinations, tvi for the 2 band combinations and the 3 vi
 #g = filter_by_column("data/train_kernel_1_v4.csv", "data/train_kernel_1_v4_fiteredfieldsg.csv", ['054112895040_01'],type_filter={'b': ['b4','b6'], 'vi': ['RVI', 'MSAVI2', 'NDI'], 'tb':['corr','dent','diss'],'tvi':['imcorr2','inertia','prom']})
+#1 image, 2 bands, vi for all band combinations, tb for all bands, tvi for all band combinations and all vi
+#g = filter_by_column("data/train_kernel_1_v4.csv", "data/train_kernel_1_v4_fiteredfieldsg_nolink.csv", ['054112895040_01'],type_filter={'b': ['b4','b6'], 'vi': ['RVI', 'MSAVI2', 'NDI'], 'tb':['corr','dent','diss'],'tvi':['imcorr2','inertia','prom']}, linked=False)
