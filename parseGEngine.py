@@ -11,7 +11,11 @@
 import csv
 import collections
 import os
+import random
 import numpy as np
+import pandas as pd
+
+
 
 #constants for bands, vegetation indexes, texture bands, texture vegetation indexes
 TYPES = ['b', 'vi', 'tb', 'tvi']
@@ -102,130 +106,237 @@ def write_filtered_row(inputrow,indexes, csvwriter):
     csvwriter.writerow(newline)
 
 
-def filter_by_row(filepath, outputfile, rows_by_class=100):
-    """ decrease the size of the file, for each class take no more than rows_by_class rows
-    the function print the numer of pixels for each class
-    :param filepath: path to the csv file
-    :param outputfile: path to the output csv file
-    :param rows_by_class: the max number of returned rows for each class
-    :return: the filtered csv file; the first 2 rows are kept
+def clean_directory(directory, end=None):
+    """ delete all the files in a directory, optionally filter the files
+    :param directory: working directory
+    :param end: the end of the file to filter
+    :return: None
     """
 
-    #TODO: randomize data
+    f = os.listdir(directory)
+    if end:
+        f = [i for i in f if i.endswith(end)]
+    for i in f:
+        try: #skip locked files
+            os.remove(directory+'/'+i)
+        except:
+            pass
+
+
+def check_item_count(infile):
+    """ utility function to check if the number of columns in a csv file is always the same
+    :param infile:
+    :return: True if the number is the same plus min and max values
+    """
+    f = open(infile)
+    reader = csv.reader(f)
+    count = []
+
+    for line in reader:
+        count.append(len(line))
+
+    print(min(count), max(count))
+
+    return min(count) == max(count), min(count), max(count)
+
+
+############FILTER BY ROW###########
+
+def filter_by_row(filepath, outputfile, headerscount = 2, clsfilter = 0, rows_by_class=100):
+    """ decrease the size of the file, for each class take no more than rows_by_class rows
+    the function will save the new file and print the number of pixels for each class
+
+    IMPORTANT: this function will read all the file in memory. If the file is too big use filter_by_randomized_row()
+
+    :param filepath: path to the csv file
+    :param outputfile: path to the output csv file
+    :param headerscount : number of row headers
+    :param clsfilter: the index of the column with filter values
+    :param rows_by_class: the max number of returned rows for each class
+    :return: the count of rows for each class
+    """
 
     inp = open (filepath)
     reader = csv.reader(inp)
-
-
-    out = open( outputfile, 'w',newline='')
+    out = open( outputfile, 'w', newline='')
     writer = csv.writer(out)
 
-    #write first 2 rows
-    writer.writerow(next(reader))
-    writer.writerow(next(reader))
+    # write headers
+    for i in range(headerscount):
+        writer.writerow(next(reader))
 
-    countpix = {} #dictionary to store pixel counts for each class
+    # using pandas/numpy to open and shuffle the entire file in memory
+    print('opening csv file, wait....')
+    f = pd.read_csv(filepath, header=headerscount)
+    arr = f.values
+    print('shuffling data, wait....')
+    np.random.shuffle(arr)
+
+    # dictionary to store pixel counts for each class
+    countpix = {}
 
     print('scanning file')
-    for line in reader:
-        print('.', end='')
+    for line in arr:
 
-        if not line[0]: continue #skik empty rows
+        if line[clsfilter] not in countpix:
+            countpix[line[clsfilter]] = 0  # start the counter
 
-        if line[0] not in countpix:
-            countpix[line[0]] = 0 #start the counter
-
-        if countpix[line[0]] < rows_by_class:
-            countpix[line[0]] += 1
-            writer.writerow(line)
+        if countpix[line[clsfilter]] < rows_by_class:
+            countpix[line[clsfilter]] += 1
+            writer.writerow(list(line))
 
     inp.close()
     out.close()
 
-    print('\nresults: ',countpix)
+    print('\nresults: ', countpix)
+    return countpix
 
 
-def filter_by_column(filepath, outputfile, image_filter = None, type_filter = None, default_indexes = 2, linked = True):
-    """ Filter the google engine files by field and output a new csv
-
-    type_filter =
-    { 'b' : ['b1','b2','b3','b4','b5','b6','b7','b8'],
-      'vi': ['DVI', 'NDI', 'RVI', 'SAVI', 'TCARI', 'EVI', 'MSAVI2']
-      'tb': ['asm', 'contrast','corr','dent','diss','dvar','ent','idm','imcorr1','imcorr2','inertia','prom','savg','sent','shade','svar','var']
-      'tvi': ['asm', 'contrast','corr','dent','diss','dvar','ent','idm','imcorr1','imcorr2','inertia','prom','savg','sent','shade','svar','var']
-    }
-
-
-    if no type_filter, take all
-    if no key, no output
-    if subfilter is empty list, take all for this type of filter
-
-    :param filepath: path to the csv file
-    :param outputfile: path to the output csv file
-    :param image_filter: list of images names; pass None for all images
-    :param type_filter: dictionary of types and subtypes to filter, possible names are in TYPES,VITYPES,VITYPES, TEXTYPES
-    if no subfilter is needed (which is take all) leave the key empty   e.g. 'b':{}
-    :param default_indexes: the number of left columns with the indexes
-
-    :return:  list of output field names, indexes of field names, list of output imagenames
+def split_input(filepath, outdirectory, headerscount=2, outsuffix='_tmp', splitrows=50):
+    """ split a big text file info smaller pieces
+    :param filepath: input file
+    :param outdirectory:  path for temporary directory
+    :param headerscount: number of header rows, these will go in file 0
+    :param outsuffix: the suffix for the output file
+    :param splitrows: number of rows for each output file
+    :return: number of created files
     """
 
-    #if no image and filter is specified exit
-    if not image_filter and not type_filter:
-        print('please, specify and image filter and/or a type filter')
-        return
+    if not os.path.exists(outdirectory):
+        os.mkdir(outdirectory)
 
-    #if the image is specified but not the filter take all for the image
-    elif not type_filter:
-        type_filter = { 'b' : BANDS,
-                        'vi': VITYPES,
-                        'tb': TEXTYPES,
-                        'tvi': TEXTYPES }
+    f = open(filepath)
 
-    #if the lists are empty take all
-    if 'b' in type_filter and not type_filter['b']: type_filter['b'] = BANDS
-    if 'vi' in type_filter and not type_filter['vi']: type_filter['vi'] = VITYPES
-    if 'tb' in type_filter and not type_filter['tb']: type_filter['tb'] = TEXTYPES
-    if 'tvi' in type_filter and not type_filter['tvi']: type_filter['tvi'] = TEXTYPES
+    # write file with only headers
+    h = open(outdirectory + '/0' + outsuffix, 'w')
+    for i in range(headerscount):
+        h.write(next(f))
+    h.close()
 
-    inp = open(filepath)
+    # split file into multiple files
+    g = None
+    nfile = 1
+    try:
+        while True:
+            counter = 0
+            print("splitting file step ", nfile)
+            g = open(outdirectory + '/' + str(nfile) + outsuffix, 'w')
+            while counter < splitrows:
+                row = next(f)
+                if row[0] != ',': #skip empty rows
+                    g.write(row)
+                counter += 1
+            g.flush()
+            g.close()
+            nfile += 1
+
+    except StopIteration as e: # this will happen when we go over the last row
+        if g and not g.closed:
+            g.close()
+
+    if f and not f.closed: f.close()
+
+    return nfile
+
+
+def shuffle(directory, start=1, endfile=10, fmt="%.16f", suffix=['_tmp', '_shuffletmp'], delimiter=','):
+    """ shuffle csv files, the default start file is 1 because the file 0 store the headers
+
+     IMPORTANT: this function cannot work with mixed values types and numpy.loadtext will fail ifthere are empty values
+
+    :param directory: input directory with the files to shuffle
+    :param start: the starting file prefix
+    :param endfile: the end file prefix
+    :param fmt: the data output format
+    :param suffix: the suffix for the input and output files
+    :param delimiter: items delimiter
+    :return: start,endfile
+    """
+
+    for i in range(start, endfile + 1):
+        arr = np.loadtxt(directory + '/' + str(i) + suffix[0], delimiter=delimiter)
+        print('shuffling subfile ' + str(i))
+        np.random.shuffle(arr)
+        np.savetxt(directory + '/' + str(i) + suffix[1], arr, delimiter=delimiter, fmt=fmt)
+
+    return start, endfile
+
+
+def filter_by_randomized_row(directory, outputfile, suffix=['_tmp', '_shuffletmp'], headerscount=2, clsfilter = 0, rows_by_class=100):
+    """ access chunk of files, randomize them, take 'rows_by_class' rows for each class
+
+    the function print and return the number of pixels for each class
+
+    IMPORTANT: if the input file is small you may want to use filter_by_row()
+
+    :param directory: input directory
+    :param outputfile: path to the output csv file
+    :param suffix: the suffix for the input and output files
+    :param headerscount: number of header rows, these will go in file 0
+    :param clsfilter: the index of the column with filter values
+    :param rows_by_class: the max number of returned rows for each class
+    :return:  the count of rows for each class
+    """
+
+    # TODO exit the loop when all the classes have reached row_by_class (this would need the number of classes)
+
+    # get the 2 headers
+    inp = open(directory + '/0' + suffix[0])
     reader = csv.reader(inp)
+
     out = open(outputfile, 'w', newline='')
     writer = csv.writer(out)
 
-    # access field row
-    next(reader)  # first row with image names
-    fields = next(reader)
-
-    # define the indexes to filter the csv rows
-    if linked:
-        a = linked_iteration(filepath,image_filter, type_filter,default_indexes, fields)
-    else:
-        a = standard_iteration(filepath,image_filter, type_filter,default_indexes, fields)
-
-    if not a:
-        print('try again!')
-        return
-
-    imagenames = a[0]
-    indexes = a[1]
-
-    # write filtered headers
-    writer.writerow(imagenames)
-    write_filtered_row(fields, indexes, writer)
-    # write filtered rows
-    print('filtering lines')
-    for line in reader:
-        if not line[0]:
-            continue  # skip empty lines
-        write_filtered_row(line, indexes, writer)
+    # write headers
+    for i in range(headerscount):
+        writer.writerow(next(reader))
 
     inp.close()
+
+    # dictionary to store pixel counts for each class
+    countpix = {}
+
+    # list the suitable files in the directory
+    f = os.listdir(directory)
+    f = [i for i in f if i.endswith(suffix[1])]
+
+    # randomize the list of files in place
+    random.shuffle(f)
+
+    # iterate the files and get rows
+    for i in f:
+
+        print('scanning file ' + i)
+
+        inp = open(directory + '/' + i)
+
+        reader = csv.reader(inp)
+
+        for line in reader:
+
+            if not line[clsfilter]:
+                continue  # skip empty rows
+
+            if line[clsfilter] not in countpix:
+                countpix[line[clsfilter]] = 0  # start the counter
+
+            if countpix[line[clsfilter]] < rows_by_class:
+                countpix[line[clsfilter]] += 1
+                writer.writerow(line)
+
+        if inp and not inp.closed:
+            inp.close()
+
+    if inp and not inp.closed:
+        inp.close()
+
     out.close()
 
-    print('done')
+    print('\nresults: ', countpix)
 
-    return [fields[i] for i in indexes], indexes, imagenames
+    return countpix
+
+############FILTER BY COLUMN###########
 
 def linked_iteration(filepath,image_filter, type_filter,default_indexes, fields):
     """  define the imagenames and indexes for the output using linked types
@@ -375,8 +486,8 @@ def linked_iteration(filepath,image_filter, type_filter,default_indexes, fields)
 
     return imagenames, indexes
 
-def standard_iteration(filepath,image_filter, type_filter,default_indexes, fields):
 
+def standard_iteration(filepath,image_filter, type_filter,default_indexes, fields):
     """  define the imagenames and indexes for the output using linked types
          the filters are independent, for linked filters use the function linked_iteration()
     :param filepath: the input google engine csv file
@@ -466,64 +577,145 @@ def standard_iteration(filepath,image_filter, type_filter,default_indexes, field
     return imagenames, indexes
 
 
-def splitinput(filepath, outdirectory, headerscount = 2, splitrows = 50):
-    '''
-    :param filepath:
-    :param outdirectory: absollute path for temporary directory
-    :param splitrows: number of rows for each out file
-    :return:
-    '''
+def filter_by_column(filepath, outputfile, image_filter=None, type_filter=None, default_indexes=2, linked=True):
+    """ Filter the google engine files by field and output a new csv
 
-    if not os.path.exists(outdirectory):
-        os.mkdir(outdirectory)
+    the first 2 rows are considered as headers
 
-    f = open(filepath)
+    :param filepath: path to the csv file
+    :param outputfile: path to the output csv file
+    :param image_filter: list of images names; pass None for all images
+    :param type_filter: dictionary of types and subtypes to filter, possible names are in TYPES,VITYPES,VITYPES, TEXTYPES
 
-    # write file with only headers
-    h = open(outdirectory + '/0_tmp', 'w')
-    for i in range(headerscount):
-        h.write(next(f))
-    h.close()
+    type_filter =
+    { 'b' : ['b1','b2','b3','b4','b5','b6','b7','b8'],
+      'vi': ['DVI', 'NDI', 'RVI', 'SAVI', 'TCARI', 'EVI', 'MSAVI2']
+      'tb': ['asm', 'contrast','corr','dent','diss','dvar','ent','idm','imcorr1','imcorr2','inertia','prom','savg','sent','shade','svar','var']
+      'tvi': ['asm', 'contrast','corr','dent','diss','dvar','ent','idm','imcorr1','imcorr2','inertia','prom','savg','sent','shade','svar','var']
+    }
 
-    # split file into multiple files
-    g = None
-    nfile = 1
-    try:
-        while(True):
-            counter = 0
-            g = open(outdirectory + '/' + str(nfile) +'_tmp', 'w')
-            while counter < splitrows:
-                row = next(f)
-                if row[0] != ',' : g.write(row)
-                counter += 1
-            g.flush()
-            g.close()
-            nfile += 1
+    if no type_filter, take all
+    if no subfilter is needed (which is take all) leave the key empty   e.g. 'b':{}
+    if no key, no output for this filter
 
-    except StopIteration as e:
-        if g and not g.closed:
-            g.close()
+    :param default_indexes: the number of left columns with the indexes
+    :param linked: dependent or independent filtrs?
 
-    if f and not f.closed: f.close()
+    if linked=False you get:
+    the vegetation index output is independent from  the chosen bands
+    the texture bands is independent from the chosen bands
+    the texture vegetation indexes is independent from the chosen bands and independent from the chosen vegindexes
 
-    return nfile
+    if linked=True you get:
+    the vegetation index output depends on the chosen bands (but not for 'SAVI', 'TCARI', 'EVI', 'MSAVI2' )
+    the texture bands depend on the chosen bands
+    the texture vegetation indexes depend on the chosen bands (but not for 'SAVI', 'TCARI', 'EVI', 'MSAVI2' ) and chosen vegindex
 
+    if linked=True or linked=False
 
-def shuffle(directory, nfile):
-    for i in (1,nfile):
-        arr = np.loadtxt(directory + '/' + str(i) + '_tmp', delimiter=',')
-        print('shuffling file '+str(i))
-        np.random.shuffle(arr)
-        arr.tofile(directory + '/' + str(i) + '_tmp', sep=",", format="%.16f")
+    :return:  list of output field names, indexes of field names, list of output imagenames
+    """
+
+    # if no image and filter is specified exit
+    if not image_filter and not type_filter:
+        print('please, specify and image filter and/or a type filter')
+        return
+
+    # if the image is specified but not the filter take all for the image
+    elif not type_filter:
+        type_filter = { 'b' : BANDS,
+                        'vi': VITYPES,
+                        'tb': TEXTYPES,
+                        'tvi': TEXTYPES }
+
+    # if the lists are empty take all
+    if 'b' in type_filter and not type_filter['b']: type_filter['b'] = BANDS
+    if 'vi' in type_filter and not type_filter['vi']: type_filter['vi'] = VITYPES
+    if 'tb' in type_filter and not type_filter['tb']: type_filter['tb'] = TEXTYPES
+    if 'tvi' in type_filter and not type_filter['tvi']: type_filter['tvi'] = TEXTYPES
+
+    inp = open(filepath)
+    reader = csv.reader(inp)
+    out = open(outputfile, 'w', newline='')
+    writer = csv.writer(out)
+
+    # access field row
+    next(reader)  # first row with image names
+    fields = next(reader) # second row with field names
+
+    # define the indexes to filter the csv rows
+    if linked:
+        a = linked_iteration(filepath,image_filter, type_filter,default_indexes, fields)
+    else:
+        a = standard_iteration(filepath,image_filter, type_filter,default_indexes, fields)
+
+    if not a:
+        print('try again!')
+        return
+
+    imagenames = a[0]
+    indexes = a[1]
+
+    # write filtered headers
+    writer.writerow(imagenames)
+    write_filtered_row(fields, indexes, writer)
+    # write filtered rows
+    print('filtering lines')
+    for line in reader:
+        if not line[0]:
+            continue  # skip empty lines
+        write_filtered_row(line, indexes, writer)
+
+    inp.close()
+    out.close()
+
+    print('done')
+
+    return [fields[i] for i in indexes], indexes, imagenames
+
 
 ###############################################TESTS############################
 #print(get_structure("data/train_kernel_1_v4.csv"))
 
-#filter_by_row("data/train_kernel_1_v4.csv","data/train_kernel_1_v4_fiteredrows.csv" ,1)
+################################ FILTER BY ROW TESTS#####################
 
-##### infile = splitinput( "data/train_kernel_1_v4.csv", r"C:\Users\claudio\PycharmProjects\STARS\temp" )
-##### shuffle(r"C:\Users\claudio\PycharmProjects\STARS\temp", infile)
+#########################filter with pandas (everything in memory)
 
+#inp= r"C:\Users\claudio\PycharmProjects\STARS\data\train_kernel_1_v5_Clean.csv"
+#out= r"C:\Users\claudio\PycharmProjects\STARS\data\train_kernel_1_v5_Clean_filteredpandas.csv"
+#filter_by_row(inp,out)
+
+############################filter by splitting (for very big files)
+#### first plit the file, then randomize the chunks internally, finally iterate random chunks
+
+#drt = r"C:\Users\claudio\PycharmProjects\STARS\temp"
+#inp= r"C:\Users\claudio\PycharmProjects\STARS\data\train_kernel_1_v5_Clean.csv"
+#out = r"C:\Users\claudio\PycharmProjects\STARS\data\train_kernel_1_v5_Clean_filteredsplitted.csv"
+
+####clean_directory(drt)  #use this if you want to clean the temporary directory
+
+#1) split file; by default 50 rows per chunck, use splitrows parameter to change it
+#infile = split_input( inp, drt)
+
+#2) shuffle the chunks internally
+# the -1 is here because this input file had a problem with the last csv line, -1 means do not consider the last chunk of data
+#shuffle(drt, endfile=(infile - 1))
+
+#3) get the result from randomized chunks
+#filter_by_randomized_row(drt,out, rows_by_class=100)
+
+#4) clean the temporary directory
+#clean_directory(drt)
+
+######################################## check if the number of columns csv files is always the same
+#import os
+#tmp = r"C:\Users\claudio\PycharmProjects\STARS\temp"
+#files=os.listdir(tmp)
+#for f in files:
+#    print(tmp + "/" + f, check_item_count(tmp + "/" + f))
+
+
+################################ FILTER BY COLUMN TESTS#####################
 
 ############ same results
 # 1 image,all bands
