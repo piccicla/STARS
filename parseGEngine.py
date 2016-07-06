@@ -699,6 +699,7 @@ def filter_by_column(filepath, outputfile, image_filter=None, type_filter=None, 
 
 #2) shuffle the chunks internally
 # the -1 is here because this input file had a problem with the last csv line, -1 means do not consider the last chunk of data
+#generally it would be just infile
 #shuffle(drt, endfile=(infile - 1))
 
 #3) get the result from randomized chunks
