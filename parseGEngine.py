@@ -862,7 +862,7 @@ def filter_by_column(filepath, outputfile, image_filter=None, type_filter=None, 
 #1 image, NDI index
 #bbbbbb = filter_by_column("data/train_kernel_1_v4.csv", "data/train_kernel_1_v4_fiteredfieldsBbbbbbb.csv",['054112895040_01'],type_filter={'vi': ['NDI']})
 # 1 image, NDI index
-#bbbbbb = filter_by_column("data/train_kernel_1_v4.csv", "data/train_kernel_1_v4_fiteredfieldsBbbbbbb_nolink.csv",['054112895040_01'],type_filter={'vi': ['NDI']}, linked=False)
+# bbbbbb = filter_by_column("data/train_kernel_1_v4.csv", "data/train_kernel_1_v4_fiteredfieldsBbbbbbb_nolink.csv",['054112895040_01'],type_filter={'vi': ['NDI']}, linked=False)
 
 ############################### different results
 #1 image, 2 bands, NDI index( only the 2 band combinations)
