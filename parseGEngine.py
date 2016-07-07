@@ -16,7 +16,6 @@ import numpy as np
 import pandas as pd
 
 
-
 #constants for bands, vegetation indexes, texture bands, texture vegetation indexes
 TYPES = ['b', 'vi', 'tb', 'tvi']
 BANDS = ['b1','b2','b3','b4','b5','b6','b7','b8']
@@ -123,21 +122,114 @@ def clean_directory(directory, end=None):
             pass
 
 
-def check_item_count(infile):
+def check_item_count(infile, delimiter=','):
     """ utility function to check if the number of columns in a csv file is always the same
     :param infile:
     :return: True if the number is the same plus min and max values
     """
     f = open(infile)
-    reader = csv.reader(f)
+    reader = csv.reader(f, delimiter= delimiter)
     count = []
 
     for line in reader:
         count.append(len(line))
 
-    print(min(count), max(count))
+    print('min =', str(min(count)), 'max =', str(max(count)))
 
     return min(count) == max(count), min(count), max(count)
+
+
+def count_row(file):
+    """ count number of rows in a text file
+    :param file:
+    :return:
+    """
+    with open(file) as f:
+        row_count = sum(1 for row in f)
+        print(row_count)
+    return row_count
+
+
+def get_rows(file, start, end= None):
+    """ read range of lines from a text file
+
+    return a nested list, each sub list is a row as a string ( therefore it contains \n at the end, use string.strip())
+
+    if end is not defined it will read only one row
+    end must equal or  greater than start
+    start must be positive
+
+    the end in comprised in the result,
+
+    :param file: input text file
+    :param start: start index
+    :param end: end index
+    :return: a nested list, each sub list is a row
+    """
+
+    if not end:
+        end=start
+    if start<0:
+        return []
+    if end<start:
+        return []
+
+    out=[]
+
+    f = open(file)
+
+    n=0
+
+    try:
+        for i in range(start):
+            next(f)
+        for i in range(start, end+1):
+            out.append(next(f))
+
+    except StopIteration:
+        pass
+
+    finally:
+        if f: f.close()
+        return out
+
+
+def skllifier(infile, outfile, indelimiter=',', outdelimiter='\t'):
+    """convert a GoogleEngine file to an input skll file
+    :param infile: input text file
+    :param outfile: output text file
+    :param indelimiter: delimiter for the input file
+    :param outdelimiter: delimiter for the output file
+    :return: None
+    """
+    f = open(infile)
+    rdr = csv.reader(f, delimiter=indelimiter)
+
+    out = open(outfile,'w', newline='')
+    wrt= csv.writer(out, delimiter=outdelimiter)
+
+    next(rdr) #skip firstrow
+    fields = next(rdr)
+
+
+    print('skllifying!...',end='')
+    del fields[:2]
+    fields.insert(0,'id')
+    fields.append('label')
+
+    wrt.writerow(fields)
+
+    for n,line in enumerate(rdr):
+
+        del line[1]
+        line.append(line.pop(0))
+        line.insert(0,n+1)
+        wrt.writerow(line)
+
+    f.close()
+    out.close()
+
+    print('done')
 
 
 ############FILTER BY ROW###########
@@ -676,6 +768,10 @@ def filter_by_column(filepath, outputfile, image_filter=None, type_filter=None, 
 
 ###############################################TESTS############################
 #print(get_structure("data/train_kernel_1_v4.csv"))
+
+#####skllify a file
+#skllifier(r"C:\Users\claudio\PycharmProjects\STARS\temp\preskll.txt",r"C:\Users\claudio\PycharmProjects\STARS\temp\afterskll.tsv")
+#check_item_count(r"C:\Users\claudio\PycharmProjects\STARS\temp\afterskll.tsv", delimiter='\t')
 
 ################################ FILTER BY ROW TESTS#####################
 
