@@ -150,7 +150,7 @@ def count_row(file):
     return row_count
 
 
-def get_rows(file, start, end= None):
+def get_row(file, start, end= None):
     """ read range of lines from a text file
 
     return a nested list, each sub list is a row as a string ( therefore it contains \n at the end, use string.strip())
@@ -208,9 +208,11 @@ def skllifier(infile, outfile, indelimiter=',', outdelimiter='\t'):
     out = open(outfile,'w', newline='')
     wrt= csv.writer(out, delimiter=outdelimiter)
 
-    next(rdr) #skip firstrow
+    names=next(rdr) #skip firstrow
     fields = next(rdr)
 
+    for i in range(2, len(names)):
+        fields[i] = '_'.join(names[i].split('_')[-3:-1]) + '_' + fields[i]
 
     print('skllifying!...',end='')
     del fields[:2]
@@ -219,6 +221,7 @@ def skllifier(infile, outfile, indelimiter=',', outdelimiter='\t'):
 
     wrt.writerow(fields)
 
+    print('wait...', end='')
     for n,line in enumerate(rdr):
 
         del line[1]
@@ -772,6 +775,11 @@ def filter_by_column(filepath, outputfile, image_filter=None, type_filter=None, 
 #####skllify a file
 #skllifier(r"C:\Users\claudio\PycharmProjects\STARS\temp\preskll.txt",r"C:\Users\claudio\PycharmProjects\STARS\temp\afterskll.tsv")
 #check_item_count(r"C:\Users\claudio\PycharmProjects\STARS\temp\afterskll.tsv", delimiter='\t')
+
+
+########get 1 or a range of rows
+#r = get_row(r"C:\Users\claudio\PycharmProjects\STARS\temp\afterskll.tsv",0)
+
 
 ################################ FILTER BY ROW TESTS#####################
 
