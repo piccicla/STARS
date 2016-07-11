@@ -275,7 +275,7 @@ def filter_by_row(filepath, outputfile, clsfilter = 0, rows_by_class=100, skipna
     writer = csv.writer(out)
 
     # write headers to output
-    if kwargs and kwargs.get('header',0):
+    if kwargs and kwargs.get('header','infer'):
         if isinstance(kwargs['header'], int):
             for i in range(kwargs['header']):
                 writer.writerow(next(reader))
@@ -816,8 +816,8 @@ def filter_by_column(filepath, outputfile, image_filter=None, type_filter=None, 
 
 #########################filter with pandas (everything in memory)
 
-inp = r"C:\Users\piccinini\PycharmProjects\STARS\data\test.csv"
-out =  r"C:\Users\piccinini\PycharmProjects\STARS\data\test_filter_row.csv"
+#inp = r"C:\Users\piccinini\PycharmProjects\STARS\data\test.csv"
+#out =  r"C:\Users\piccinini\PycharmProjects\STARS\data\test_filter_row.csv"
 #inp= r"C:\Users\claudio\PycharmProjects\STARS\data\train_kernel_1_v5_Clean.csv"
 #out= r"C:\Users\claudio\PycharmProjects\STARS\data\train_kernel_1_v5_Clean_filteredpandas.csv"
 
