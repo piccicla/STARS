@@ -237,17 +237,35 @@ def skllifier(infile, outfile, indelimiter=',', outdelimiter='\t'):
 
 ############FILTER BY ROW###########
 
-def filter_by_row(filepath, outputfile, headerscount = 2, clsfilter = 0, rows_by_class=100):
+def filter_by_row(filepath, outputfile, clsfilter = 0, rows_by_class=100, skipnan=True,  **kwargs):
     """ decrease the size of the file, for each class take no more than rows_by_class rows
     the function will save the new file and print the number of pixels for each class
 
     IMPORTANT: this function will read all the file in memory. If the file is too big use filter_by_randomized_row()
 
+    don't forget to pass  header=2 for the **kwargs to skip the headers!!!
+
+    ######skip rows with empty values
+    #filter_by_row(inp,out,  header=2)
+    #filter_by_row(inp,out, skipnan=True,  header=2, na_filter=True)
+    #filter_by_row(inp,out, skipnan=True,  header=2)
+
+    #don't skip rows and output nan for empty values
+    #filter_by_row(inp,out,skipnan=False, header=2,na_filter=True)
+    #filter_by_row(inp,out,skipnan=False,  header=2)
+
+    #don't skip rows and output empty for empty values
+    #filter_by_row(inp,out,skipnan=False,  header=2, na_filter=False)
+
     :param filepath: path to the csv file
     :param outputfile: path to the output csv file
-    :param headerscount : number of row headers
     :param clsfilter: the index of the column with filter values
     :param rows_by_class: the max number of returned rows for each class
+    :param skipnan: True if rows with empty value must be skipped
+            if skipnan is True then the pandas parameter na_filter must be True
+    :param **kwargs: parameters for pandas.read_csv()
+                  http://pandas.pydata.org/pandas-docs/stable/generated/pandas.read_csv.html#pandas.read_csv
+
     :return: the count of rows for each class
     """
 
@@ -256,14 +274,27 @@ def filter_by_row(filepath, outputfile, headerscount = 2, clsfilter = 0, rows_by
     out = open( outputfile, 'w', newline='')
     writer = csv.writer(out)
 
-    # write headers
-    for i in range(headerscount):
-        writer.writerow(next(reader))
+    # write headers to output
+    if kwargs and kwargs.get('header',0):
+        if isinstance(kwargs['header'], int):
+            for i in range(kwargs['header']):
+                writer.writerow(next(reader))
+
+    if skipnan:
+        if kwargs and kwargs.get('na_filter',True) == False:
+            print('if skipnan=True then na_filter must be True')
+            print('try again!')
+            return
 
     # using pandas/numpy to open and shuffle the entire file in memory
     print('opening csv file, wait....')
-    f = pd.read_csv(filepath, header=headerscount)
+    f = pd.read_csv(filepath,**kwargs)
     arr = f.values
+
+    if skipnan:
+        print('delete incomplete rows...')
+        arr = np.delete(arr, list(set(np.where(pd.isnull(arr))[0])), axis=0)
+
     print('shuffling data, wait....')
     np.random.shuffle(arr)
 
@@ -785,9 +816,25 @@ def filter_by_column(filepath, outputfile, image_filter=None, type_filter=None, 
 
 #########################filter with pandas (everything in memory)
 
+inp = r"C:\Users\piccinini\PycharmProjects\STARS\data\test.csv"
+out =  r"C:\Users\piccinini\PycharmProjects\STARS\data\test_filter_row.csv"
 #inp= r"C:\Users\claudio\PycharmProjects\STARS\data\train_kernel_1_v5_Clean.csv"
 #out= r"C:\Users\claudio\PycharmProjects\STARS\data\train_kernel_1_v5_Clean_filteredpandas.csv"
-#filter_by_row(inp,out)
+
+
+######skip rows with empty values
+#filter_by_row(inp,out,  header=2)
+#filter_by_row(inp,out, skipnan=True,  header=2, na_filter=True)
+#filter_by_row(inp,out, skipnan=True,  header=2)
+
+
+#don't skip rows and output nan for empty values
+#filter_by_row(inp,out,skipnan=False, header=2,na_filter=True)
+#filter_by_row(inp,out,skipnan=False,  header=2)
+
+#don't skip rows and output empty for empty values
+#filter_by_row(inp,out,skipnan=False,  header=2, na_filter=False)
+
 
 ############################filter by splitting (for very big files)
 #### first plit the file, then randomize the chunks internally, finally iterate random chunks
