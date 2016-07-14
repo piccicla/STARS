@@ -354,7 +354,7 @@ def indexed_numpy_to_list(data, nodata = -3.40282e+038):
             bands.append(a)
             print("band", str(i+1), "added")
 
-            return bands
+        return bands
 
     except RuntimeError as err:
         raise err

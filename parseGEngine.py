@@ -14,7 +14,7 @@ import os
 import random
 import numpy as np
 import pandas as pd
-
+from sklearn.cross_validation import KFold
 
 #constants for bands, vegetation indexes, texture bands, texture vegetation indexes
 TYPES = ['b', 'vi', 'tb', 'tvi']
@@ -800,8 +800,124 @@ def filter_by_column(filepath, outputfile, image_filter=None, type_filter=None, 
     return [fields[i] for i in indexes], indexes, imagenames
 
 
+############ cross something
+
+
+
+def ind_VfoldCross( data, **kwargs):
+    """ Funcionqu se le introduce los datos las etiquetas y el numero de grupos que se quiere obtener
+    :param data: numpy 1D collection with the labels
+    :param **kwargs: keyword arguments  for  KFold
+
+            default **kwargs values are
+
+            n_folds : int, default=3 Number of folds. Must be at least 2.
+            shuffle : boolean, optional Whether to shuffle the data before splitting into batches.
+            random_state : None, int or RandomState When shuffle=True, pseudo-random number generator state
+                            used for shuffling. If None, use default numpy RNG for shuffling.
+
+    :return: train_fold list, test_fold list, the numbers of folds
+
+    source from matlab
+    function indc = ind_VfoldCross(Y, grupos)
+    % Funcionqu se le introduce los datos las etiquetas y el numero de grupos
+    % que se quiere obtener
+
+    clase = unique(Y);
+    indc = zeros(size(Y, 1), 1);
+    for t=1:length(clase)
+        ind = find(Y == clase(t));
+        in =crossvalind('Kfold', length(ind), grupos);
+        for p=1:grupos
+            indc(ind( in == p))=p;
+        end
+    end
+
+    """
+
+    if len(data.shape)> 1:
+        print("please, use a 1D array")
+        return
+    #get the unique classes
+
+    if not kwargs.get('n_folds', False):
+        print("n_folds parameter not specified, default 3 will be used")
+
+    #numpy.unique(ar, return_index=False, return_inverse=False, return_counts=False)
+    cls = np.unique(data)
+
+    #initialize empty result 2d array
+    arr_train = np.zeros(data.shape[0],)
+    arr_test = np.zeros(data.shape[0],)
+
+    i=0
+    try:
+        for i in cls:
+            #get the indexes for each
+            ind = np.where(data == i)
+
+            #KFold(n, n_folds=3, shuffle=False, random_state=None)
+            kf = KFold( len(ind[0]), **kwargs )
+
+            for n,j in enumerate(kf):
+                #print(j)
+                arr_train[ ind[0][j[0]] ] = n
+                arr_test[ind[0][j[1]]] = n
+
+    except Exception as e:
+        print("class ", i)
+        print(e)
+        return
+
+    if not kwargs.get('n_folds', False):
+        kwargs['n_folds'] = 3
+    return arr_train, arr_test, kwargs['n_folds']
+
+
+
+
+
+
 ###############################################TESTS############################
 #print(get_structure("data/train_kernel_1_v4.csv"))
+
+############## cross folders
+
+'''
+
+originaldata = np.array([[1, 1, 9, 0, 1, 0, 6, 3, 7, 3],
+                             [2, 2, 6, 4, 7, 3, 6, 7, 7, 8],
+                             [3, 3, 1, 1, 0, 5, 9, 7, 7, 9],
+                             [4, 4, 3, 6, 5, 7, 1, 3, 3, 8],
+                             [1, 5, 0, 4, 1, 5, 4, 0, 0, 9],
+                             [2, 6, 5, 2, 2, 6, 5, 5, 6, 8],
+                             [3, 7, 5, 3, 7, 0, 9, 2, 0, 5],
+                             [4, 8, 6, 4, 5, 4, 1, 3, 0, 2],
+                             [1, 9, 2, 6, 0, 1, 4, 6, 4, 0],
+                             [2, 10, 0, 7, 1, 5, 6, 2, 6, 7],
+                             [3, 11, 8, 9, 4, 6, 4, 7, 6, 6],
+                             [4, 12, 0, 7, 7, 0, 6, 6, 2, 9],
+                             [1, 13, 9, 6, 9, 5, 5, 8, 5, 8],
+                             [2, 14, 7, 3, 6, 9, 0, 3, 7, 7],
+                             [3, 15, 8, 9, 8, 5, 1, 4, 9, 0],
+                             [4, 16, 5, 1, 5, 6, 9, 1, 0, 1],
+                             [5, 17, 5, 9, 4, 7, 6, 9, 8, 1],
+                             [5, 18, 9, 3, 7, 8, 5, 2, 3, 7],
+                             [2, 19, 7, 5, 8, 2, 8, 8, 0, 9],
+                             [2, 20, 0, 3, 0, 3, 9, 9, 6, 6]])
+
+#extract column with classes
+cls = originaldata[:, 0]
+
+arr_train, arr_test, n_folds = ind_VfoldCross(cls, n_folds=2)
+print(arr_train, arr_test)
+
+# this is the first group
+print(originaldata[arr_train == 0])
+# this is the second group
+print(originaldata[arr_train == 1])
+
+'''
 
 #####skllify a file
 #skllifier(r"C:\Users\claudio\PycharmProjects\STARS\temp\preskll.txt",r"C:\Users\claudio\PycharmProjects\STARS\temp\afterskll.tsv")

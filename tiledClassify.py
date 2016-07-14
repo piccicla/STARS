@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 #-------------------------------------------------------------------------------
 # Name:        tiledClassify.py
-# Purpose:
+# Purpose:      Tiled classification of an image given a sklearn classifier
 #
 # Author:      claudio piccinini
 #
@@ -9,14 +9,17 @@
 #-------------------------------------------------------------------------------
 
 from osgeo import gdal
+import numpy as np
 import gdalRasterIO
 
 def tiledClassification(img,classifier,  tilesize =(256,256), outname = 'classify.tif'):
     """
+    Tiled classification of an image given a sklearn classifier
     :param img: image path
     :param classifier: scikit learn trained classifier
     :param tilesize: tile size (columns, rows)
     :param outname: output path
+    :param use_indexed: use an indexed array (this is used to filter out pixels with nodata value)
     :return: None
     """
 
@@ -34,6 +37,7 @@ def tiledClassification(img,classifier,  tilesize =(256,256), outname = 'classif
         nodata = in_band.GetNoDataValue()
         # how many bands is the input?
         nbands = in_ds.RasterCount
+
 
         # set properties of the classified image
         out_ds = in_ds.GetDriver().Create(outname, xsize, ysize, 1, in_band.DataType)
@@ -69,6 +73,7 @@ def tiledClassification(img,classifier,  tilesize =(256,256), outname = 'classif
                 # read the multiband tile into a 3d numpy array
                 data = in_ds.ReadAsArray(x, y, cols, rows)
 
+
                 # Create memory target raster
                 in_memory = gdal.GetDriverByName('MEM').Create('', cols, rows, nbands, in_band.DataType)
                 in_memory.SetGeoTransform(in_ds.GetGeoTransform()) #assign a geotransform
@@ -83,8 +88,11 @@ def tiledClassification(img,classifier,  tilesize =(256,256), outname = 'classif
                     band.FlushCache()
                 band = None
 
-                # transform the ndvi to an indexed array
-                b = gdalRasterIO.raster_dataset_to_indexed_numpy(in_memory, "inmemory", nbands, "bycolumn", nodata)
+                # transform the inmemory multiband raster to an indexed array
+                if nodata:
+                    b = gdalRasterIO.raster_dataset_to_indexed_numpy(in_memory, "inmemory", nbands, "bycolumn", nodata)
+                else: #if nodata is None just use the defaults
+                    b = gdalRasterIO.raster_dataset_to_indexed_numpy(in_memory, "inmemory", nbands, "bycolumn")
 
                 in_memory = None
 
@@ -99,18 +107,22 @@ def tiledClassification(img,classifier,  tilesize =(256,256), outname = 'classif
                 # save the indexed array as an array, get a list of bands arrays,
                 # rasterdt=gdalRasterIO.indexedNumpyToRasterDataset(b, outname+'.'+suffix, workingcatalog4 ,nodata=outnodatavalue, returnlist=True)
 
-                rasterdt = gdalRasterIO.indexed_numpy_to_list(b, nodata=nodata)
+                if nodata:
+                    rasterdt = gdalRasterIO.indexed_numpy_to_list(b, nodata=nodata)
+                else:
+                    rasterdt = gdalRasterIO.indexed_numpy_to_list(b)
 
                 gg = rasterdt[0]
 
+                # add the classified tile to the output
                 out_band.WriteArray(gg, x, y)
-
                 out_band.FlushCache()
 
             i += 1
 
         out_band.FlushCache()
-        out_band.SetNoDataValue(nodata)
+        if nodata:
+            out_band.SetNoDataValue(nodata)
         out_band.ComputeStatistics(False)
         # #out_ds.BuildOverviews('average', [2, 4, 8, 16, 32])
         out_ds = None
